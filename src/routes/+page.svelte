@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { writeText, writeImage } from "@tauri-apps/plugin-clipboard-manager";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
+  import { startDrag } from "@crabnebula/tauri-plugin-drag";
   import ArrowOverlay from "$lib/ArrowOverlay.svelte";
   import type { Arrow, ArrowSettings } from "$lib/types";
 
@@ -285,7 +286,18 @@
     <div class="separator"></div>
 
     {#if filePath}
-      <div class="file-path" title={filePath}>
+      <!-- Drag this to external apps (e.g. Slack) to share the file -->
+      <div
+        class="file-path draggable"
+        title={filePath}
+        role="button"
+        tabindex="-1"
+        onmousedown={() => {
+          if (filePath) {
+            startDrag({ item: [filePath], icon: filePath });
+          }
+        }}
+      >
         {filePath}
       </div>
       <button
@@ -429,6 +441,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .file-path.draggable {
+    cursor: grab;
+  }
+
+  .file-path.draggable:active {
+    cursor: grabbing;
   }
 
   .spacer {
