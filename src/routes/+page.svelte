@@ -49,6 +49,34 @@
   // Image element reference for composite rendering
   let imgEl = $state<HTMLImageElement | null>(null);
 
+  // Natural image dimensions and display scale
+  let naturalWidth = $state(0);
+  let naturalHeight = $state(0);
+  let viewportEl = $state<HTMLDivElement | null>(null);
+  let viewportWidth = $state(0);
+  let viewportHeight = $state(0);
+
+  // CSS scale to fit the natural-size wrapper into the viewport
+  let displayScale = $derived(
+    naturalWidth > 0 && naturalHeight > 0 && viewportWidth > 0 && viewportHeight > 0
+      ? Math.min(viewportWidth / naturalWidth, viewportHeight / naturalHeight, 1)
+      : 1
+  );
+
+  function onImageLoad() {
+    if (imgEl) {
+      naturalWidth = imgEl.naturalWidth;
+      naturalHeight = imgEl.naturalHeight;
+    }
+  }
+
+  function updateViewportSize() {
+    if (viewportEl) {
+      viewportWidth = viewportEl.clientWidth;
+      viewportHeight = viewportEl.clientHeight;
+    }
+  }
+
   onMount(() => {
     // Restore arrow settings from localStorage
     const saved = localStorage.getItem(ARROW_SETTINGS_KEY);
@@ -72,6 +100,10 @@
     }
 
     captureScreen();
+    updateViewportSize();
+
+    const resizeObserver = new ResizeObserver(() => updateViewportSize());
+    if (viewportEl) resizeObserver.observe(viewportEl);
 
     // アプリ再アクティブ時にキャプチャーモードを開始
     const unlisten = listen("reactivate", () => {
@@ -96,6 +128,7 @@
     return () => {
       window.removeEventListener("keydown", handleKeydown);
       unlisten.then((fn) => fn());
+      resizeObserver.disconnect();
     };
   });
 
@@ -122,6 +155,8 @@
       filePath = result.file_path;
       arrows = [];
       masks = [];
+      naturalWidth = 0;
+      naturalHeight = 0;
     } catch (e) {
       const errorStr = String(e);
       if (!errorStr.includes("cancelled")) {
@@ -151,16 +186,13 @@
         const ctx = canvas.getContext("2d")!;
         ctx.drawImage(img, 0, 0);
 
-        // Scale factor: SVG overlay uses displayed size, canvas uses natural size
-        const scaleX = imgEl ? img.naturalWidth / imgEl.clientWidth : 1;
-        const scaleY = imgEl ? img.naturalHeight / imgEl.clientHeight : 1;
-
+        // Coords are already in natural pixels, no scale conversion needed
         for (const arrow of arrows) {
-          const sx = arrow.startX * scaleX;
-          const sy = arrow.startY * scaleY;
-          const ex = arrow.endX * scaleX;
-          const ey = arrow.endY * scaleY;
-          const t = arrow.thickness * Math.max(scaleX, scaleY);
+          const sx = arrow.startX;
+          const sy = arrow.startY;
+          const ex = arrow.endX;
+          const ey = arrow.endY;
+          const t = arrow.thickness;
           const hs = t * 4;
 
           const dx = sx - ex;
@@ -171,11 +203,9 @@
           const ux = dx / len;
           const uy = dy / len;
 
-          // Line start shortened to arrowhead base
           const lsX = sx - ux * hs;
           const lsY = sy - uy * hs;
 
-          // Arrowhead triangle points
           const perpX = -uy;
           const perpY = ux;
           const halfW = hs * 0.4;
@@ -184,14 +214,14 @@
 
           if (arrow.dropShadow) {
             ctx.shadowColor = "rgba(0,0,0,0.5)";
-            ctx.shadowBlur = 4 * Math.max(scaleX, scaleY);
-            ctx.shadowOffsetX = 2 * scaleX;
-            ctx.shadowOffsetY = 2 * scaleY;
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
           }
 
           if (arrow.whiteStroke) {
             ctx.strokeStyle = "white";
-            ctx.lineWidth = t + 4 * Math.max(scaleX, scaleY);
+            ctx.lineWidth = t + 4;
             ctx.lineCap = "round";
             ctx.beginPath();
             ctx.moveTo(lsX, lsY);
@@ -206,11 +236,10 @@
             ctx.lineTo(bX - perpX * halfW, bY - perpY * halfW);
             ctx.closePath();
             ctx.fill();
-            ctx.lineWidth = 4 * Math.max(scaleX, scaleY);
+            ctx.lineWidth = 4;
             ctx.stroke();
           }
 
-          // Main line
           ctx.strokeStyle = arrow.color;
           ctx.lineWidth = t;
           ctx.lineCap = "round";
@@ -219,7 +248,6 @@
           ctx.lineTo(ex, ey);
           ctx.stroke();
 
-          // Arrowhead
           ctx.fillStyle = arrow.color;
           ctx.beginPath();
           ctx.moveTo(sx, sy);
@@ -228,19 +256,17 @@
           ctx.closePath();
           ctx.fill();
 
-          // Reset shadow
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 0;
         }
 
-        // Render masks
         for (const mask of masks) {
-          const mx = Math.round(mask.x * scaleX);
-          const my = Math.round(mask.y * scaleY);
-          const mw = Math.round(mask.width * scaleX);
-          const mh = Math.round(mask.height * scaleY);
+          const mx = Math.round(mask.x);
+          const my = Math.round(mask.y);
+          const mw = Math.round(mask.width);
+          const mh = Math.round(mask.height);
           if (mw <= 0 || mh <= 0) continue;
 
           if (mask.mode === "fill") {
@@ -526,14 +552,18 @@
     </button>
   </div>
 
-  <div class="flex-1 flex items-center justify-center overflow-auto p-4">
+  <div bind:this={viewportEl} class="flex-1 flex items-center justify-center overflow-hidden p-4">
     {#if imageUrl}
-      <div class="relative inline-block max-w-full max-h-full">
+      <div
+        class="relative rounded shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden"
+        style="width:{naturalWidth}px;height:{naturalHeight}px;transform:scale({displayScale});transform-origin:top left;margin-right:{naturalWidth * (displayScale - 1)}px;margin-bottom:{naturalHeight * (displayScale - 1)}px;"
+      >
         <img
           bind:this={imgEl}
           src={imageUrl}
           alt="Screenshot"
-          class="max-w-full max-h-[calc(100vh-80px)] object-contain rounded shadow-[0_4px_20px_rgba(0,0,0,0.5)] block"
+          class="block w-full h-full"
+          onload={onImageLoad}
         />
         <MaskOverlay
           bind:this={maskOverlayRef}
@@ -541,7 +571,7 @@
           settings={maskSettings}
           toolActive={maskToolActive}
           interactive={!arrowToolActive}
-          imageElement={imgEl}
+          scale={displayScale}
           onMasksChange={(newMasks) => (masks = newMasks)}
         />
         <ArrowOverlay
@@ -550,6 +580,7 @@
           settings={arrowSettings}
           toolActive={arrowToolActive}
           interactive={!maskToolActive}
+          scale={displayScale}
           onArrowsChange={(newArrows) => (arrows = newArrows)}
         />
       </div>

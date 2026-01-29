@@ -6,10 +6,11 @@
     settings: ArrowSettings;
     toolActive: boolean;
     interactive: boolean;
+    scale: number;
     onArrowsChange: (arrows: Arrow[]) => void;
   }
 
-  let { arrows, settings, toolActive, interactive, onArrowsChange }: Props = $props();
+  let { arrows, settings, toolActive, interactive, scale, onArrowsChange }: Props = $props();
 
   let selectedId = $state<string | null>(null);
   let dragging = $state<"draw" | "move-start" | "move-end" | null>(null);
@@ -69,14 +70,14 @@
   }
 
   function nearPoint(px: number, py: number, x: number, y: number): boolean {
-    return Math.sqrt((px - x) ** 2 + (py - y) ** 2) < 10;
+    return Math.sqrt((px - x) ** 2 + (py - y) ** 2) < 10 / scale;
   }
 
   function getSvgCoords(e: MouseEvent): { x: number; y: number } | null {
     const svg = (e.currentTarget as SVGSVGElement) ?? (e.target as Element).closest("svg");
     if (!svg) return null;
     const rect = svg.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
   }
 
   function handleMouseDown(e: MouseEvent) {
@@ -99,7 +100,7 @@
     }
 
     // Click existing arrow to select
-    const hit = [...arrows].reverse().find((a) => distToArrow(a, pt.x, pt.y) < a.thickness + 6);
+    const hit = [...arrows].reverse().find((a) => distToArrow(a, pt.x, pt.y) < a.thickness + 6 / scale);
     if (hit) {
       selectedId = hit.id;
       return;
@@ -216,8 +217,8 @@
     </g>
 
     {#if isSelected}
-      <circle cx={arrow.startX} cy={arrow.startY} r="6" fill="white" stroke="#0066cc" stroke-width="2" class="handle" />
-      <circle cx={arrow.endX} cy={arrow.endY} r="6" fill="white" stroke="#0066cc" stroke-width="2" class="handle" />
+      <circle cx={arrow.startX} cy={arrow.startY} r={6 / scale} fill="white" stroke="#0066cc" stroke-width={2 / scale} class="handle" />
+      <circle cx={arrow.endX} cy={arrow.endY} r={6 / scale} fill="white" stroke="#0066cc" stroke-width={2 / scale} class="handle" />
     {/if}
   {/each}
 </svg>

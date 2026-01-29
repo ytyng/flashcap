@@ -6,11 +6,11 @@
     settings: MaskSettings;
     toolActive: boolean;
     interactive: boolean;
-    imageElement: HTMLImageElement | null;
+    scale: number;
     onMasksChange: (masks: MaskRect[]) => void;
   }
 
-  let { masks, settings, toolActive, interactive, imageElement, onMasksChange }: Props = $props();
+  let { masks, settings, toolActive, interactive, scale, onMasksChange }: Props = $props();
 
   let selectedId = $state<string | null>(null);
   let dragging = $state<"draw" | "move" | "resize" | null>(null);
@@ -25,7 +25,7 @@
     const svg = (e.currentTarget as SVGSVGElement) ?? (e.target as Element).closest("svg");
     if (!svg) return null;
     const rect = svg.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
   }
 
   function handleMouseDown(e: MouseEvent) {
@@ -137,13 +137,14 @@
   const HANDLE_SIZE = 6;
   function hitTestHandle(mask: MaskRect, px: number, py: number): string | null {
     const { x, y, width: w, height: h } = mask;
+    const hitRadius = HANDLE_SIZE / scale;
     const handles: [string, number, number][] = [
       ["nw", x, y], ["n", x + w / 2, y], ["ne", x + w, y],
       ["w", x, y + h / 2], ["e", x + w, y + h / 2],
       ["sw", x, y + h], ["s", x + w / 2, y + h], ["se", x + w, y + h],
     ];
     for (const [name, hx, hy] of handles) {
-      if (Math.abs(px - hx) <= HANDLE_SIZE && Math.abs(py - hy) <= HANDLE_SIZE) return name;
+      if (Math.abs(px - hx) <= hitRadius && Math.abs(py - hy) <= hitRadius) return name;
     }
     return null;
   }
@@ -191,24 +192,25 @@
 
   /**
    * 画像の指定領域をピクセル化した data URL を返す。
-   * 表示座標 → 元画像の自然解像度に変換し、縮小→拡大でモザイク化。
+   * 座標は既に自然解像度ベースなので変換不要。
    */
   function pixelateRegion(mask: MaskRect): string | null {
-    if (!imageElement) return null;
-    const scaleX = imageElement.naturalWidth / imageElement.clientWidth;
-    const scaleY = imageElement.naturalHeight / imageElement.clientHeight;
-    const sx = Math.round(mask.x * scaleX);
-    const sy = Math.round(mask.y * scaleY);
-    const sw = Math.round(mask.width * scaleX);
-    const sh = Math.round(mask.height * scaleY);
+    // SVG内の<image>要素から元画像を取得
+    const svgEl = document.querySelector(".mask-overlay");
+    const imgInParent = svgEl?.parentElement?.querySelector("img") as HTMLImageElement | null;
+    if (!imgInParent) return null;
+
+    const sx = Math.round(mask.x);
+    const sy = Math.round(mask.y);
+    const sw = Math.round(mask.width);
+    const sh = Math.round(mask.height);
     if (sw <= 0 || sh <= 0) return null;
 
-    // 元画像から対象領域を切り出し
     const src = document.createElement("canvas");
     src.width = sw;
     src.height = sh;
     const sCtx = src.getContext("2d")!;
-    sCtx.drawImage(imageElement, sx, sy, sw, sh, 0, 0, sw, sh);
+    sCtx.drawImage(imgInParent, sx, sy, sw, sh, 0, 0, sw, sh);
 
     // 縮小（ブロックサイズ分の1に）
     const blockSize = 10;
@@ -282,9 +284,10 @@
     {#if isSelected}
       <rect
         x={mask.x} y={mask.y} width={mask.width} height={mask.height}
-        fill="none" stroke="#0066cc" stroke-width="2" stroke-dasharray="4 2"
+        fill="none" stroke="#0066cc" stroke-width={2 / scale} stroke-dasharray="{4 / scale} {2 / scale}"
       />
       <!-- 8方向リサイズハンドル -->
+      {@const visualHandleSize = HANDLE_SIZE / scale}
       {#each [
         ["nw", mask.x, mask.y],
         ["n", mask.x + mask.width / 2, mask.y],
@@ -296,13 +299,13 @@
         ["se", mask.x + mask.width, mask.y + mask.height],
       ] as [name, hx, hy]}
         <rect
-          x={Number(hx) - HANDLE_SIZE / 2}
-          y={Number(hy) - HANDLE_SIZE / 2}
-          width={HANDLE_SIZE}
-          height={HANDLE_SIZE}
+          x={Number(hx) - visualHandleSize / 2}
+          y={Number(hy) - visualHandleSize / 2}
+          width={visualHandleSize}
+          height={visualHandleSize}
           fill="white"
           stroke="#0066cc"
-          stroke-width="1.5"
+          stroke-width={1.5 / scale}
           style:cursor={handleCursorForHandle(String(name))}
           class="handle"
         />
