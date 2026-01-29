@@ -1,13 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for all windows",
+  "windows": ["main", "preferences"],
   "permissions": [
     "core:default",
     "opener:default",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-write-image",
-    "drag:default"
+    "drag:default",
+    "store:default",
+    "dialog:default"
   ]
 }

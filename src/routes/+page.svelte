@@ -106,6 +106,7 @@
 
   async function copyPath() {
     if (!filePath) return;
+    await saveCompositeToFile();
     await writeText(filePath);
     copyPathSuccess = true;
     setTimeout(() => (copyPathSuccess = false), 3000);
@@ -214,19 +215,43 @@
     });
   }
 
+  function uint8ToBase64(bytes: Uint8Array): string {
+    const chunks: string[] = [];
+    for (let i = 0; i < bytes.length; i += 8192) {
+      chunks.push(String.fromCharCode(...bytes.subarray(i, i + 8192)));
+    }
+    return btoa(chunks.join(""));
+  }
+
+  function base64ToUint8(base64: string): Uint8Array {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  // 合成画像をファイルに書き出す（矢印がある場合のみ）
+  // メモリ上の元画像 (imageBase64) はそのまま保持する
+  // compositeBytes が渡された場合は再レンダリングをスキップする
+  async function saveCompositeToFile(compositeBytes?: Uint8Array) {
+    if (!filePath || !imageBase64 || arrows.length === 0) return;
+    const bytes = compositeBytes ?? await renderComposite();
+    await invoke("write_image_to_file", {
+      path: filePath,
+      dataBase64: uint8ToBase64(bytes),
+    });
+  }
+
   async function copyImage() {
     if (!imageBase64) return;
 
-    let bytes: Uint8Array;
-    if (arrows.length > 0) {
-      bytes = await renderComposite();
-    } else {
-      const binaryStr = atob(imageBase64);
-      bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-    }
+    const bytes = arrows.length > 0
+      ? await renderComposite()
+      : base64ToUint8(imageBase64);
+
+    await saveCompositeToFile(bytes);
     await writeImage(bytes);
     copyImageSuccess = true;
     setTimeout(() => (copyImageSuccess = false), 3000);
@@ -244,31 +269,31 @@
   }
 </script>
 
-<div class="app">
-  <div class="toolbar">
+<div class="flex flex-col h-screen bg-[#1a1a1a] text-white font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+  <div class="flex items-center gap-2 px-3 py-2 bg-[#2d2d2d] border-b border-[#3d3d3d] min-h-[40px]">
     <button
       class="tool-btn"
       class:active={arrowToolActive}
       onclick={toggleArrowTool}
-      title="Arrow tool"
+      data-tooltip="Arrow tool"
     >
       <i class="bi bi-arrow-up-right"></i>
     </button>
 
     {#if arrowToolActive}
-      <div class="separator"></div>
+      <div class="w-px h-6 bg-[#3d3d3d]"></div>
 
       <input
         type="color"
         class="color-picker"
         bind:value={arrowSettings.color}
-        title="Arrow color"
+        data-tooltip="Arrow color"
       />
 
       <select
-        class="thickness-select"
+        class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
         bind:value={arrowSettings.thickness}
-        title="Arrow thickness"
+        data-tooltip="Arrow thickness"
       >
         <option value={2}>Thin</option>
         <option value={4}>Medium</option>
@@ -280,7 +305,7 @@
         class="tool-btn"
         class:active={arrowSettings.whiteStroke}
         onclick={() => (arrowSettings.whiteStroke = !arrowSettings.whiteStroke)}
-        title="White border"
+        data-tooltip="White border"
       >
         <i class="bi bi-border-width"></i>
       </button>
@@ -289,33 +314,39 @@
         class="tool-btn"
         class:active={arrowSettings.dropShadow}
         onclick={() => (arrowSettings.dropShadow = !arrowSettings.dropShadow)}
-        title="Drop shadow"
+        data-tooltip="Drop shadow"
       >
         <i class="bi bi-shadows"></i>
       </button>
     {/if}
 
-    <div class="separator"></div>
+    <div class="w-px h-6 bg-[#3d3d3d]"></div>
 
     {#if filePath}
-      <!-- Drag this to external apps (e.g. Slack) to share the file -->
-      <div
-        class="file-path draggable"
-        title={filePath}
-        role="button"
-        tabindex="-1"
-        onmousedown={() => {
+      <!-- Drag this icon to external apps (e.g. Slack) to share the file -->
+      <button
+        class="tool-btn cursor-grab active:cursor-grabbing"
+        data-tooltip="Drag to share file"
+        onmousedown={async () => {
           if (filePath) {
+            await saveCompositeToFile();
             startDrag({ item: [filePath], icon: filePath });
           }
         }}
       >
-        {filePath}
-      </div>
+        <i class="bi bi-grip-vertical"></i>
+      </button>
+      <input
+        type="text"
+        class="w-[200px] text-[13px] text-[#aaa] bg-transparent border-none outline-none"
+        value={filePath}
+        readonly
+        title={filePath}
+      />
       <button
         class="tool-btn"
         onclick={copyPath}
-        title="Copy file path (⌘C)"
+        data-tooltip="Copy file path (⌘C)"
       >
         {#if copyPathSuccess}
           <i class="bi bi-check-lg"></i>
@@ -326,7 +357,7 @@
       <button
         class="tool-btn"
         onclick={copyImage}
-        title="Copy image (⌘⇧C)"
+        data-tooltip="Copy image (⌘⇧C)"
       >
         {#if copyImageSuccess}
           <i class="bi bi-check-lg"></i>
@@ -337,28 +368,33 @@
       <button
         class="tool-btn"
         onclick={openFolder}
-        title="Open save folder"
+        data-tooltip="Open save folder"
       >
         <i class="bi bi-folder2-open"></i>
       </button>
     {/if}
 
-    <div class="spacer"></div>
+    <div class="flex-1"></div>
 
     <button
-      class="tool-btn capture-btn"
+      class="tool-btn bg-[#0066cc] text-white hover:bg-[#0077ee]"
       onclick={captureScreen}
       disabled={isCapturing}
-      title="Capture new area"
+      data-tooltip="Capture new area"
     >
       <i class="bi bi-camera"></i>
     </button>
   </div>
 
-  <div class="image-area">
+  <div class="flex-1 flex items-center justify-center overflow-auto p-4">
     {#if imageUrl}
-      <div class="image-container">
-        <img bind:this={imgEl} src={imageUrl} alt="Screenshot" />
+      <div class="relative inline-block max-w-full max-h-full">
+        <img
+          bind:this={imgEl}
+          src={imageUrl}
+          alt="Screenshot"
+          class="max-w-full max-h-[calc(100vh-80px)] object-contain rounded shadow-[0_4px_20px_rgba(0,0,0,0.5)] block"
+        />
         <ArrowOverlay
           {arrows}
           settings={arrowSettings}
@@ -367,9 +403,9 @@
         />
       </div>
     {:else if isCapturing}
-      <div class="placeholder">Capturing...</div>
+      <div class="text-[#666] text-sm">Capturing...</div>
     {:else}
-      <div class="placeholder">No image</div>
+      <div class="text-[#666] text-sm">No image</div>
     {/if}
   </div>
 </div>
@@ -379,26 +415,6 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
-  }
-
-  .app {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    background: #1a1a1a;
-    color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      sans-serif;
-  }
-
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: #2d2d2d;
-    border-bottom: 1px solid #3d3d3d;
-    min-height: 40px;
   }
 
   .tool-btn {
@@ -431,70 +447,32 @@
     color: #fff;
   }
 
-  .capture-btn {
-    background: #0066cc;
-    color: #fff;
-  }
-
-  .capture-btn:hover:not(:disabled) {
-    background: #0077ee;
-  }
-
-  .separator {
-    width: 1px;
-    height: 24px;
-    background: #3d3d3d;
-  }
-
-  .file-path {
-    font-size: 13px;
-    color: #aaa;
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .file-path.draggable {
-    cursor: grab;
-  }
-
-  .file-path.draggable:active {
-    cursor: grabbing;
-  }
-
-  .spacer {
-    flex: 1;
-  }
-
-  .image-area {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: auto;
-    padding: 16px;
-  }
-
-  .image-container {
+  /* Instant tooltip via data-tooltip attribute + ::after */
+  [data-tooltip] {
     position: relative;
-    display: inline-block;
-    max-width: 100%;
-    max-height: 100%;
   }
 
-  .image-container img {
-    max-width: 100%;
-    max-height: calc(100vh - 80px);
-    object-fit: contain;
+  [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: #000;
+    color: #eee;
+    font-size: 11px;
+    line-height: 1.3;
     border-radius: 4px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    display: block;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+    z-index: 100;
   }
 
-  .placeholder {
-    color: #666;
-    font-size: 14px;
+  [data-tooltip]:hover::after {
+    opacity: 1;
   }
 
   .color-picker {
@@ -514,15 +492,5 @@
   .color-picker::-webkit-color-swatch {
     border: 1px solid #555;
     border-radius: 3px;
-  }
-
-  .thickness-select {
-    background: #3d3d3d;
-    color: #ccc;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 4px 6px;
-    font-size: 12px;
-    cursor: pointer;
   }
 </style>
