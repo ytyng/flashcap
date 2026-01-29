@@ -54,7 +54,7 @@
     if (!filePath) return;
     await writeText(filePath);
     copyPathSuccess = true;
-    setTimeout(() => (copyPathSuccess = false), 1500);
+    setTimeout(() => (copyPathSuccess = false), 3000);
   }
 
   async function copyImage() {
@@ -66,7 +66,7 @@
     }
     await writeImage(bytes);
     copyImageSuccess = true;
-    setTimeout(() => (copyImageSuccess = false), 1500);
+    setTimeout(() => (copyImageSuccess = false), 3000);
   }
 </script>
 
