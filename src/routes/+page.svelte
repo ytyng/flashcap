@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { writeText, writeImage } from "@tauri-apps/plugin-clipboard-manager";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { startDrag } from "@crabnebula/tauri-plugin-drag";
@@ -50,6 +51,11 @@
 
     captureScreen();
 
+    // アプリ再アクティブ時にキャプチャーモードを開始
+    const unlisten = listen("reactivate", () => {
+      captureScreen();
+    });
+
     function handleKeydown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -65,7 +71,10 @@
       }
     }
     window.addEventListener("keydown", handleKeydown);
-    return () => window.removeEventListener("keydown", handleKeydown);
+    return () => {
+      window.removeEventListener("keydown", handleKeydown);
+      unlisten.then((fn) => fn());
+    };
   });
 
   // Persist arrow settings to localStorage on change
@@ -224,7 +233,10 @@
   }
 
   async function openFolder() {
-    await revealItemInDir("/tmp/flashcap/");
+    if (filePath) {
+      // ファイルを指定することでフォルダ内のファイル一覧が表示される
+      await revealItemInDir(filePath);
+    }
   }
 
   function toggleArrowTool() {

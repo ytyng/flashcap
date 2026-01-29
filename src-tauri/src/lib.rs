@@ -2,6 +2,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use tauri::{Emitter, Manager};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScreenshotResult {
@@ -72,7 +73,25 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_drag::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 既に起動中のインスタンスに対して再度起動コマンドが来た場合
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+            let _ = app.emit("reactivate", ());
+        }))
         .invoke_handler(tauri::generate_handler![take_screenshot_interactive])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Reopen { .. } = event {
+                // Dock アイコンクリック時
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+                let _ = app.emit("reactivate", ());
+            }
+        });
 }
