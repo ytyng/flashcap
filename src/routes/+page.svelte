@@ -23,6 +23,7 @@
   // Arrow tool state
   let arrowToolActive = $state(false);
   let arrows = $state<Arrow[]>([]);
+  const ARROW_SETTINGS_KEY = "flashcap-arrow-settings";
   let arrowSettings = $state<ArrowSettings>({
     color: "#FF0000",
     thickness: 4,
@@ -34,6 +35,18 @@
   let imgEl = $state<HTMLImageElement | null>(null);
 
   onMount(() => {
+    // Restore arrow settings from localStorage
+    const saved = localStorage.getItem(ARROW_SETTINGS_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        arrowSettings.color = parsed.color ?? arrowSettings.color;
+        arrowSettings.thickness = parsed.thickness ?? arrowSettings.thickness;
+        arrowSettings.whiteStroke = parsed.whiteStroke ?? arrowSettings.whiteStroke;
+        arrowSettings.dropShadow = parsed.dropShadow ?? arrowSettings.dropShadow;
+      } catch { /* ignore invalid JSON */ }
+    }
+
     captureScreen();
 
     function handleKeydown(e: KeyboardEvent) {
@@ -52,6 +65,15 @@
     }
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
+  });
+
+  // Persist arrow settings to localStorage on change
+  $effect(() => {
+    const { color, thickness, whiteStroke, dropShadow } = arrowSettings;
+    localStorage.setItem(
+      ARROW_SETTINGS_KEY,
+      JSON.stringify({ color, thickness, whiteStroke, dropShadow })
+    );
   });
 
   async function captureScreen() {
