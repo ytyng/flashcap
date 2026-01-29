@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
@@ -6,51 +7,62 @@ use std::process::Command;
 pub struct ScreenshotResult {
     pub width: usize,
     pub height: usize,
-    pub data: String, // base64 encoded PNG
+    pub data: String,      // base64 encoded PNG
+    pub file_path: String, // saved file path
+}
+
+fn get_screenshot_path() -> String {
+    let desktop = dirs::desktop_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("flashcap_{}.png", timestamp);
+    desktop.join(filename).to_string_lossy().to_string()
 }
 
 #[tauri::command]
-fn take_screenshot_interactive() -> Result<ScreenshotResult, String> {
-    // Use macOS screencapture command with interactive selection (-i)
-    // This gives exactly the same UX as Cmd+Shift+4
-    let temp_path = "/tmp/flashcap_screenshot.png";
+fn take_screenshot_interactive(window: tauri::Window) -> Result<ScreenshotResult, String> {
+    let file_path = get_screenshot_path();
 
-    // Remove old file if exists
-    let _ = std::fs::remove_file(temp_path);
+    // Hide the app window so it doesn't appear in the screenshot
+    let _ = window.hide();
+    // Small delay to ensure the window is fully hidden
+    std::thread::sleep(std::time::Duration::from_millis(300));
 
-    // Run screencapture -i (interactive selection mode)
     let status = Command::new("screencapture")
-        .args(["-i", temp_path])
+        .args(["-i", &file_path])
         .status()
-        .map_err(|e| format!("Failed to run screencapture: {}", e))?;
+        .map_err(|e| {
+            let _ = window.show();
+            format!("Failed to run screencapture: {}", e)
+        })?;
+
+    // Show the app window again
+    let _ = window.show();
 
     if !status.success() {
-        return Err("screencapture was cancelled or failed".to_string());
-    }
-
-    // Check if file was created (user might have pressed Escape)
-    if !std::path::Path::new(temp_path).exists() {
         return Err("Screenshot was cancelled".to_string());
     }
 
-    // Read the PNG file
-    let png_data = std::fs::read(temp_path)
+    if !std::path::Path::new(&file_path).exists() {
+        return Err("Screenshot was cancelled".to_string());
+    }
+
+    // Resolve to absolute path
+    let absolute_path = std::fs::canonicalize(&file_path)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or(file_path);
+
+    let png_data = std::fs::read(&absolute_path)
         .map_err(|e| format!("Failed to read screenshot: {}", e))?;
 
-    // Get image dimensions
     let img = image::load_from_memory(&png_data)
         .map_err(|e| format!("Failed to decode image: {}", e))?;
 
-    let width = img.width() as usize;
-    let height = img.height() as usize;
-
-    // Clean up temp file
-    let _ = std::fs::remove_file(temp_path);
-
     Ok(ScreenshotResult {
-        width,
-        height,
+        width: img.width() as usize,
+        height: img.height() as usize,
         data: STANDARD.encode(&png_data),
+        file_path: absolute_path,
     })
 }
 
@@ -58,6 +70,7 @@ fn take_screenshot_interactive() -> Result<ScreenshotResult, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![take_screenshot_interactive])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

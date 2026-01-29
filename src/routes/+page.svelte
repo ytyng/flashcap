@@ -1,165 +1,233 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { writeText, writeImage } from "@tauri-apps/plugin-clipboard-manager";
 
   interface ScreenshotResult {
     width: number;
     height: number;
     data: string;
+    file_path: string;
   }
 
   let isCapturing = $state(false);
-  let error = $state<string | null>(null);
   let imageUrl = $state<string | null>(null);
-  let imageDimensions = $state<{ width: number; height: number } | null>(null);
+  let imageBase64 = $state<string | null>(null);
+  let filePath = $state<string | null>(null);
+  let copyPathSuccess = $state(false);
+  let copyImageSuccess = $state(false);
 
-  // Auto-start capture on mount
-  $effect(() => {
+  onMount(() => {
     captureScreen();
+
+    function handleKeydown(e: KeyboardEvent) {
+      if (e.metaKey && e.shiftKey && e.key === "c") {
+        e.preventDefault();
+        copyImage();
+      } else if (e.metaKey && e.key === "c") {
+        e.preventDefault();
+        copyPath();
+      }
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
   });
 
   async function captureScreen() {
     isCapturing = true;
-    error = null;
-
     try {
       const result = await invoke<ScreenshotResult>("take_screenshot_interactive");
+      imageBase64 = result.data;
       imageUrl = `data:image/png;base64,${result.data}`;
-      imageDimensions = { width: result.width, height: result.height };
+      filePath = result.file_path;
     } catch (e) {
-      // Don't show error if user just cancelled
       const errorStr = String(e);
       if (!errorStr.includes("cancelled")) {
-        error = `Capture failed: ${e}`;
+        console.error("Capture failed:", e);
       }
     } finally {
       isCapturing = false;
     }
   }
+
+  async function copyPath() {
+    if (!filePath) return;
+    await writeText(filePath);
+    copyPathSuccess = true;
+    setTimeout(() => (copyPathSuccess = false), 1500);
+  }
+
+  async function copyImage() {
+    if (!imageBase64) return;
+    const binaryStr = atob(imageBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    await writeImage(bytes);
+    copyImageSuccess = true;
+    setTimeout(() => (copyImageSuccess = false), 1500);
+  }
 </script>
 
-<main class="container">
-  <h1>FlashCap</h1>
+<div class="app">
+  <div class="toolbar">
+    <button class="tool-btn" title="Arrow tool">
+      <i class="bi bi-cursor"></i>
+    </button>
 
-  <div class="controls">
-    <button onclick={captureScreen} disabled={isCapturing}>
-      {isCapturing ? "Capturing..." : "Capture Screen"}
+    <div class="separator"></div>
+
+    {#if filePath}
+      <div class="file-path" title={filePath}>
+        {filePath}
+      </div>
+      <button
+        class="tool-btn"
+        onclick={copyPath}
+        title="Copy file path (⌘C)"
+      >
+        {#if copyPathSuccess}
+          <i class="bi bi-check-lg"></i>
+        {:else}
+          <i class="bi bi-clipboard"></i>
+        {/if}
+      </button>
+      <button
+        class="tool-btn"
+        onclick={copyImage}
+        title="Copy image (⌘⇧C)"
+      >
+        {#if copyImageSuccess}
+          <i class="bi bi-check-lg"></i>
+        {:else}
+          <i class="bi bi-image"></i>
+        {/if}
+      </button>
+    {/if}
+
+    <div class="spacer"></div>
+
+    <button
+      class="tool-btn capture-btn"
+      onclick={captureScreen}
+      disabled={isCapturing}
+      title="Capture new area"
+    >
+      <i class="bi bi-camera"></i>
     </button>
   </div>
 
-  {#if error}
-    <p class="error">{error}</p>
-  {/if}
-
-  <div class="image-container">
+  <div class="image-area">
     {#if imageUrl}
-      {#if imageDimensions}
-        <p class="dimensions">{imageDimensions.width} × {imageDimensions.height}</p>
-      {/if}
       <img src={imageUrl} alt="Screenshot" />
+    {:else if isCapturing}
+      <div class="placeholder">Capturing...</div>
+    {:else}
+      <div class="placeholder">No image</div>
     {/if}
   </div>
-</main>
+</div>
 
 <style>
-  :root {
-    font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-    font-size: 16px;
-    line-height: 24px;
-    font-weight: 400;
-    color: #0f0f0f;
-    background-color: #f6f6f6;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
   }
 
-  .container {
-    margin: 0;
-    padding: 20px;
+  .app {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    height: 100vh;
+    background: #1a1a1a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      sans-serif;
   }
 
-  h1 {
-    margin-bottom: 20px;
-  }
-
-  .controls {
+  .toolbar {
     display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #3d3d3d;
+    min-height: 40px;
   }
 
-  button {
-    border-radius: 8px;
-    border: 1px solid transparent;
-    padding: 0.6em 1.2em;
-    font-size: 1em;
-    font-weight: 500;
-    font-family: inherit;
-    color: #0f0f0f;
-    background-color: #ffffff;
-    transition: border-color 0.25s;
-    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+  .tool-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #ccc;
     cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-size: 16px;
   }
 
-  button:hover:not(:disabled) {
-    border-color: #396cd8;
+  .tool-btn:hover:not(:disabled) {
+    background: #3d3d3d;
+    color: #fff;
   }
 
-  button:disabled {
-    opacity: 0.6;
+  .tool-btn:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .error {
-    color: #dc3545;
-    margin-bottom: 10px;
+  .capture-btn {
+    background: #0066cc;
+    color: #fff;
   }
 
-  .dimensions {
-    text-align: center;
+  .capture-btn:hover:not(:disabled) {
+    background: #0077ee;
+  }
+
+  .separator {
+    width: 1px;
+    height: 24px;
+    background: #3d3d3d;
+  }
+
+  .file-path {
+    font-size: 13px;
+    color: #aaa;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .image-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 16px;
+  }
+
+  .image-area img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .placeholder {
     color: #666;
     font-size: 14px;
-    margin: 10px 0;
-  }
-
-  .image-container {
-    width: 100%;
-    max-width: 100%;
-    overflow: auto;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background: #fff;
-  }
-
-  img {
-    display: block;
-    max-width: 100%;
-    height: auto;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color: #f6f6f6;
-      background-color: #2f2f2f;
-    }
-
-    button {
-      color: #ffffff;
-      background-color: #0f0f0f98;
-    }
-
-    .dimensions {
-      color: #aaa;
-    }
-
-    .image-container {
-      border-color: #555;
-      background: #1a1a1a;
-    }
   }
 </style>
