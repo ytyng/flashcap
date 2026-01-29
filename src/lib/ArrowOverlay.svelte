@@ -5,10 +5,11 @@
     arrows: Arrow[];
     settings: ArrowSettings;
     toolActive: boolean;
+    interactive: boolean;
     onArrowsChange: (arrows: Arrow[]) => void;
   }
 
-  let { arrows, settings, toolActive, onArrowsChange }: Props = $props();
+  let { arrows, settings, toolActive, interactive, onArrowsChange }: Props = $props();
 
   let selectedId = $state<string | null>(null);
   let dragging = $state<"draw" | "move-start" | "move-end" | null>(null);
@@ -175,6 +176,7 @@
   onmousemove={handleMouseMove}
   onmouseup={handleMouseUp}
   style:cursor={toolActive ? "crosshair" : "default"}
+  style:pointer-events={interactive ? "auto" : "none"}
 >
   <defs>
     <filter id="arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">

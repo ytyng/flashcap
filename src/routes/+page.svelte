@@ -6,7 +6,8 @@
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { startDrag } from "@crabnebula/tauri-plugin-drag";
   import ArrowOverlay from "$lib/ArrowOverlay.svelte";
-  import type { Arrow, ArrowSettings } from "$lib/types";
+  import MaskOverlay from "$lib/MaskOverlay.svelte";
+  import type { Arrow, ArrowSettings, MaskRect, MaskSettings } from "$lib/types";
 
   interface ScreenshotResult {
     width: number;
@@ -33,6 +34,15 @@
     dropShadow: true,
   });
 
+  // Mask tool state
+  let maskToolActive = $state(false);
+  let masks = $state<MaskRect[]>([]);
+  const MASK_SETTINGS_KEY = "flashcap-mask-settings";
+  let maskSettings = $state<MaskSettings>({
+    mode: "mosaic",
+    color: "#000000",
+  });
+
   // Image element reference for composite rendering
   let imgEl = $state<HTMLImageElement | null>(null);
 
@@ -46,6 +56,15 @@
         arrowSettings.thickness = parsed.thickness ?? arrowSettings.thickness;
         arrowSettings.whiteStroke = parsed.whiteStroke ?? arrowSettings.whiteStroke;
         arrowSettings.dropShadow = parsed.dropShadow ?? arrowSettings.dropShadow;
+      } catch { /* ignore invalid JSON */ }
+    }
+
+    const savedMask = localStorage.getItem(MASK_SETTINGS_KEY);
+    if (savedMask) {
+      try {
+        const parsed = JSON.parse(savedMask);
+        maskSettings.mode = parsed.mode ?? maskSettings.mode;
+        maskSettings.color = parsed.color ?? maskSettings.color;
       } catch { /* ignore invalid JSON */ }
     }
 
@@ -86,6 +105,11 @@
     );
   });
 
+  $effect(() => {
+    const { mode, color } = maskSettings;
+    localStorage.setItem(MASK_SETTINGS_KEY, JSON.stringify({ mode, color }));
+  });
+
   async function captureScreen() {
     isCapturing = true;
     try {
@@ -94,6 +118,7 @@
       imageUrl = `data:image/png;base64,${result.data}`;
       filePath = result.file_path;
       arrows = [];
+      masks = [];
     } catch (e) {
       const errorStr = String(e);
       if (!errorStr.includes("cancelled")) {
@@ -207,6 +232,57 @@
           ctx.shadowOffsetY = 0;
         }
 
+        // Render masks
+        for (const mask of masks) {
+          const mx = Math.round(mask.x * scaleX);
+          const my = Math.round(mask.y * scaleY);
+          const mw = Math.round(mask.width * scaleX);
+          const mh = Math.round(mask.height * scaleY);
+          if (mw <= 0 || mh <= 0) continue;
+
+          if (mask.mode === "fill") {
+            ctx.fillStyle = mask.color;
+            ctx.fillRect(mx, my, mw, mh);
+          } else if (mask.mode === "blur") {
+            // Extract region, blur via OffscreenCanvas, draw back
+            const regionData = ctx.getImageData(mx, my, mw, mh);
+            const offscreen = document.createElement("canvas");
+            offscreen.width = mw;
+            offscreen.height = mh;
+            const offCtx = offscreen.getContext("2d")!;
+            offCtx.putImageData(regionData, 0, 0);
+            // Re-draw with blur
+            const blurred = document.createElement("canvas");
+            blurred.width = mw;
+            blurred.height = mh;
+            const blurCtx = blurred.getContext("2d")!;
+            blurCtx.filter = "blur(10px)";
+            blurCtx.drawImage(offscreen, 0, 0);
+            ctx.drawImage(blurred, mx, my);
+          } else if (mask.mode === "mosaic") {
+            // Pixelate: scale down then scale up
+            const blockSize = 10;
+            const regionData = ctx.getImageData(mx, my, mw, mh);
+            const small = document.createElement("canvas");
+            const sw = Math.max(1, Math.ceil(mw / blockSize));
+            const sh = Math.max(1, Math.ceil(mh / blockSize));
+            small.width = sw;
+            small.height = sh;
+            const sCtx = small.getContext("2d")!;
+            // Draw original at small size
+            const tmpCanvas = document.createElement("canvas");
+            tmpCanvas.width = mw;
+            tmpCanvas.height = mh;
+            const tmpCtx = tmpCanvas.getContext("2d")!;
+            tmpCtx.putImageData(regionData, 0, 0);
+            sCtx.drawImage(tmpCanvas, 0, 0, sw, sh);
+            // Scale back up with nearest-neighbor
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(small, 0, 0, sw, sh, mx, my, mw, mh);
+            ctx.imageSmoothingEnabled = true;
+          }
+        }
+
         canvas.toBlob((blob) => {
           blob!.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)));
         }, "image/png");
@@ -236,7 +312,7 @@
   // メモリ上の元画像 (imageBase64) はそのまま保持する
   // compositeBytes が渡された場合は再レンダリングをスキップする
   async function saveCompositeToFile(compositeBytes?: Uint8Array) {
-    if (!filePath || !imageBase64 || arrows.length === 0) return;
+    if (!filePath || !imageBase64 || (arrows.length === 0 && masks.length === 0)) return;
     const bytes = compositeBytes ?? await renderComposite();
     await invoke("write_image_to_file", {
       path: filePath,
@@ -247,7 +323,7 @@
   async function copyImage() {
     if (!imageBase64) return;
 
-    const bytes = arrows.length > 0
+    const bytes = (arrows.length > 0 || masks.length > 0)
       ? await renderComposite()
       : base64ToUint8(imageBase64);
 
@@ -266,6 +342,12 @@
 
   function toggleArrowTool() {
     arrowToolActive = !arrowToolActive;
+    if (arrowToolActive) maskToolActive = false;
+  }
+
+  function toggleMaskTool() {
+    maskToolActive = !maskToolActive;
+    if (maskToolActive) arrowToolActive = false;
   }
 </script>
 
@@ -318,6 +400,51 @@
       >
         <i class="bi bi-shadows"></i>
       </button>
+    {/if}
+
+    <button
+      class="tool-btn"
+      class:active={maskToolActive}
+      onclick={toggleMaskTool}
+      data-tooltip="Mask tool"
+    >
+      <i class="bi bi-square"></i>
+    </button>
+
+    {#if maskToolActive}
+      <div class="w-px h-6 bg-[#3d3d3d]"></div>
+
+      <button
+        class="tool-btn text-xs"
+        class:active={maskSettings.mode === "mosaic"}
+        onclick={() => (maskSettings.mode = "mosaic")}
+        data-tooltip="Mosaic"
+      >▦</button>
+      <button
+        class="tool-btn text-xs"
+        class:active={maskSettings.mode === "blur"}
+        onclick={() => (maskSettings.mode = "blur")}
+        data-tooltip="Blur"
+      >
+        <i class="bi bi-droplet-half"></i>
+      </button>
+      <button
+        class="tool-btn text-xs"
+        class:active={maskSettings.mode === "fill"}
+        onclick={() => (maskSettings.mode = "fill")}
+        data-tooltip="Fill"
+      >
+        <i class="bi bi-paint-bucket"></i>
+      </button>
+
+      {#if maskSettings.mode === "fill"}
+        <input
+          type="color"
+          class="color-picker"
+          bind:value={maskSettings.color}
+          data-tooltip="Fill color"
+        />
+      {/if}
     {/if}
 
     <div class="w-px h-6 bg-[#3d3d3d]"></div>
@@ -395,10 +522,19 @@
           alt="Screenshot"
           class="max-w-full max-h-[calc(100vh-80px)] object-contain rounded shadow-[0_4px_20px_rgba(0,0,0,0.5)] block"
         />
+        <MaskOverlay
+          {masks}
+          settings={maskSettings}
+          toolActive={maskToolActive}
+          interactive={!arrowToolActive}
+          imageElement={imgEl}
+          onMasksChange={(newMasks) => (masks = newMasks)}
+        />
         <ArrowOverlay
           {arrows}
           settings={arrowSettings}
           toolActive={arrowToolActive}
+          interactive={!maskToolActive}
           onArrowsChange={(newArrows) => (arrows = newArrows)}
         />
       </div>
@@ -455,7 +591,7 @@
   [data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
-    bottom: calc(100% + 6px);
+    top: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
     padding: 4px 8px;
