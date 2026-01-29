@@ -21,7 +21,12 @@
     captureScreen();
 
     function handleKeydown(e: KeyboardEvent) {
-      if (e.metaKey && e.shiftKey && e.key === "c") {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
+          getCurrentWindow().close()
+        );
+      } else if (e.metaKey && e.shiftKey && e.key === "c") {
         e.preventDefault();
         copyImage();
       } else if (e.metaKey && e.key === "c") {
