@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { writeText, writeImage } from "@tauri-apps/plugin-clipboard-manager";
+  import ArrowOverlay from "$lib/ArrowOverlay.svelte";
+  import type { Arrow, ArrowSettings } from "$lib/types";
 
   interface ScreenshotResult {
     width: number;
@@ -16,6 +18,19 @@
   let filePath = $state<string | null>(null);
   let copyPathSuccess = $state(false);
   let copyImageSuccess = $state(false);
+
+  // Arrow tool state
+  let arrowToolActive = $state(false);
+  let arrows = $state<Arrow[]>([]);
+  let arrowSettings = $state<ArrowSettings>({
+    color: "#FF0000",
+    thickness: 4,
+    whiteStroke: true,
+    dropShadow: true,
+  });
+
+  // Image element reference for composite rendering
+  let imgEl = $state<HTMLImageElement | null>(null);
 
   onMount(() => {
     captureScreen();
@@ -45,6 +60,7 @@
       imageBase64 = result.data;
       imageUrl = `data:image/png;base64,${result.data}`;
       filePath = result.file_path;
+      arrows = [];
     } catch (e) {
       const errorStr = String(e);
       if (!errorStr.includes("cancelled")) {
@@ -62,24 +78,182 @@
     setTimeout(() => (copyPathSuccess = false), 3000);
   }
 
+  // Render arrows onto a canvas and return PNG bytes
+  function renderComposite(): Promise<Uint8Array> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+
+        // Scale factor: SVG overlay uses displayed size, canvas uses natural size
+        const scaleX = imgEl ? img.naturalWidth / imgEl.clientWidth : 1;
+        const scaleY = imgEl ? img.naturalHeight / imgEl.clientHeight : 1;
+
+        for (const arrow of arrows) {
+          const sx = arrow.startX * scaleX;
+          const sy = arrow.startY * scaleY;
+          const ex = arrow.endX * scaleX;
+          const ey = arrow.endY * scaleY;
+          const t = arrow.thickness * Math.max(scaleX, scaleY);
+          const hs = t * 4;
+
+          const dx = sx - ex;
+          const dy = sy - ey;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len === 0) continue;
+
+          const ux = dx / len;
+          const uy = dy / len;
+
+          // Line start shortened to arrowhead base
+          const lsX = sx - ux * hs;
+          const lsY = sy - uy * hs;
+
+          // Arrowhead triangle points
+          const perpX = -uy;
+          const perpY = ux;
+          const halfW = hs * 0.4;
+          const bX = sx - ux * hs;
+          const bY = sy - uy * hs;
+
+          if (arrow.dropShadow) {
+            ctx.shadowColor = "rgba(0,0,0,0.5)";
+            ctx.shadowBlur = 4 * Math.max(scaleX, scaleY);
+            ctx.shadowOffsetX = 2 * scaleX;
+            ctx.shadowOffsetY = 2 * scaleY;
+          }
+
+          if (arrow.whiteStroke) {
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = t + 4 * Math.max(scaleX, scaleY);
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(lsX, lsY);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+
+            ctx.fillStyle = "white";
+            ctx.lineJoin = "round";
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(bX + perpX * halfW, bY + perpY * halfW);
+            ctx.lineTo(bX - perpX * halfW, bY - perpY * halfW);
+            ctx.closePath();
+            ctx.fill();
+            ctx.lineWidth = 4 * Math.max(scaleX, scaleY);
+            ctx.stroke();
+          }
+
+          // Main line
+          ctx.strokeStyle = arrow.color;
+          ctx.lineWidth = t;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(lsX, lsY);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+
+          // Arrowhead
+          ctx.fillStyle = arrow.color;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(bX + perpX * halfW, bY + perpY * halfW);
+          ctx.lineTo(bX - perpX * halfW, bY - perpY * halfW);
+          ctx.closePath();
+          ctx.fill();
+
+          // Reset shadow
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+
+        canvas.toBlob((blob) => {
+          blob!.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)));
+        }, "image/png");
+      };
+      img.src = `data:image/png;base64,${imageBase64}`;
+    });
+  }
+
   async function copyImage() {
     if (!imageBase64) return;
-    const binaryStr = atob(imageBase64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
+
+    let bytes: Uint8Array;
+    if (arrows.length > 0) {
+      bytes = await renderComposite();
+    } else {
+      const binaryStr = atob(imageBase64);
+      bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
     }
     await writeImage(bytes);
     copyImageSuccess = true;
     setTimeout(() => (copyImageSuccess = false), 3000);
   }
+
+  function toggleArrowTool() {
+    arrowToolActive = !arrowToolActive;
+  }
 </script>
 
 <div class="app">
   <div class="toolbar">
-    <button class="tool-btn" title="Arrow tool">
-      <i class="bi bi-cursor"></i>
+    <button
+      class="tool-btn"
+      class:active={arrowToolActive}
+      onclick={toggleArrowTool}
+      title="Arrow tool"
+    >
+      <i class="bi bi-arrow-up-right"></i>
     </button>
+
+    {#if arrowToolActive}
+      <div class="separator"></div>
+
+      <input
+        type="color"
+        class="color-picker"
+        bind:value={arrowSettings.color}
+        title="Arrow color"
+      />
+
+      <select
+        class="thickness-select"
+        bind:value={arrowSettings.thickness}
+        title="Arrow thickness"
+      >
+        <option value={2}>Thin</option>
+        <option value={4}>Medium</option>
+        <option value={6}>Thick</option>
+        <option value={8}>Extra thick</option>
+      </select>
+
+      <button
+        class="tool-btn"
+        class:active={arrowSettings.whiteStroke}
+        onclick={() => (arrowSettings.whiteStroke = !arrowSettings.whiteStroke)}
+        title="White border"
+      >
+        <i class="bi bi-border-width"></i>
+      </button>
+
+      <button
+        class="tool-btn"
+        class:active={arrowSettings.dropShadow}
+        onclick={() => (arrowSettings.dropShadow = !arrowSettings.dropShadow)}
+        title="Drop shadow"
+      >
+        <i class="bi bi-shadows"></i>
+      </button>
+    {/if}
 
     <div class="separator"></div>
 
@@ -125,7 +299,15 @@
 
   <div class="image-area">
     {#if imageUrl}
-      <img src={imageUrl} alt="Screenshot" />
+      <div class="image-container">
+        <img bind:this={imgEl} src={imageUrl} alt="Screenshot" />
+        <ArrowOverlay
+          {arrows}
+          settings={arrowSettings}
+          toolActive={arrowToolActive}
+          onArrowsChange={(newArrows) => (arrows = newArrows)}
+        />
+      </div>
     {:else if isCapturing}
       <div class="placeholder">Capturing...</div>
     {:else}
@@ -186,6 +368,11 @@
     cursor: not-allowed;
   }
 
+  .tool-btn.active {
+    background: #0066cc;
+    color: #fff;
+  }
+
   .capture-btn {
     background: #0066cc;
     color: #fff;
@@ -223,16 +410,53 @@
     padding: 16px;
   }
 
-  .image-area img {
+  .image-container {
+    position: relative;
+    display: inline-block;
     max-width: 100%;
     max-height: 100%;
+  }
+
+  .image-container img {
+    max-width: 100%;
+    max-height: calc(100vh - 80px);
     object-fit: contain;
     border-radius: 4px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    display: block;
   }
 
   .placeholder {
     color: #666;
     font-size: 14px;
+  }
+
+  .color-picker {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+  }
+
+  .color-picker::-webkit-color-swatch-wrapper {
+    padding: 2px;
+  }
+
+  .color-picker::-webkit-color-swatch {
+    border: 1px solid #555;
+    border-radius: 3px;
+  }
+
+  .thickness-select {
+    background: #3d3d3d;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 12px;
+    cursor: pointer;
   }
 </style>
