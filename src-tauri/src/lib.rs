@@ -12,11 +12,11 @@ pub struct ScreenshotResult {
 }
 
 fn get_screenshot_path() -> String {
-    let desktop = dirs::desktop_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
-    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-    let filename = format!("flashcap_{}.png", timestamp);
-    desktop.join(filename).to_string_lossy().to_string()
+    let dir = std::path::PathBuf::from("/tmp/flashcap");
+    let _ = std::fs::create_dir_all(&dir);
+    let timestamp = Local::now().format("%Y%m%d-%H%M%S");
+    let filename = format!("flashcap-{}.png", timestamp);
+    dir.join(filename).to_string_lossy().to_string()
 }
 
 #[tauri::command]
