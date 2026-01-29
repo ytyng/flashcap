@@ -13,9 +13,13 @@
   let { masks, settings, toolActive, interactive, imageElement, onMasksChange }: Props = $props();
 
   let selectedId = $state<string | null>(null);
-  let dragging = $state(false);
+  let dragging = $state<"draw" | "move" | "resize" | null>(null);
   let drawingRect = $state<MaskRect | null>(null);
   let dragStart = $state<{ x: number; y: number } | null>(null);
+
+  // move/resize 用の初期状態
+  let dragOrigRect = $state<{ x: number; y: number; width: number; height: number } | null>(null);
+  let resizeHandle = $state<string | null>(null); // "nw","n","ne","e","se","s","sw","w"
 
   function getSvgCoords(e: MouseEvent): { x: number; y: number } | null {
     const svg = (e.currentTarget as SVGSVGElement) ?? (e.target as Element).closest("svg");
@@ -28,14 +32,42 @@
     const pt = getSvgCoords(e);
     if (!pt) return;
 
-    if (!toolActive) {
-      const hit = [...masks].reverse().find((m) =>
-        pt.x >= m.x && pt.x <= m.x + m.width && pt.y >= m.y && pt.y <= m.y + m.height
-      );
-      selectedId = hit?.id ?? null;
+    // 選択中マスクのハンドル or 本体をドラッグ
+    if (selectedId) {
+      const sel = masks.find((m) => m.id === selectedId);
+      if (sel) {
+        const handle = hitTestHandle(sel, pt.x, pt.y);
+        if (handle) {
+          resizeHandle = handle;
+          dragging = "resize";
+          dragStart = pt;
+          dragOrigRect = { x: sel.x, y: sel.y, width: sel.width, height: sel.height };
+          return;
+        }
+        if (pt.x >= sel.x && pt.x <= sel.x + sel.width && pt.y >= sel.y && pt.y <= sel.y + sel.height) {
+          dragging = "move";
+          dragStart = pt;
+          dragOrigRect = { x: sel.x, y: sel.y, width: sel.width, height: sel.height };
+          return;
+        }
+      }
+    }
+
+    // 既存マスクをクリックして選択
+    const hit = [...masks].reverse().find((m) =>
+      pt.x >= m.x && pt.x <= m.x + m.width && pt.y >= m.y && pt.y <= m.y + m.height
+    );
+    if (hit) {
+      selectedId = hit.id;
       return;
     }
 
+    if (!toolActive) {
+      selectedId = null;
+      return;
+    }
+
+    // 新しいマスクを描画開始
     dragStart = pt;
     drawingRect = {
       id: crypto.randomUUID(),
@@ -46,30 +78,50 @@
       mode: settings.mode,
       color: settings.color,
     };
-    dragging = true;
+    dragging = "draw";
     selectedId = null;
   }
 
   function handleMouseMove(e: MouseEvent) {
     if (!dragging || !dragStart) return;
     const pt = getSvgCoords(e);
-    if (!pt || !drawingRect) return;
+    if (!pt) return;
 
-    const x = Math.min(dragStart.x, pt.x);
-    const y = Math.min(dragStart.y, pt.y);
-    const width = Math.abs(pt.x - dragStart.x);
-    const height = Math.abs(pt.y - dragStart.y);
-    drawingRect = { ...drawingRect, x, y, width, height };
+    const dx = pt.x - dragStart.x;
+    const dy = pt.y - dragStart.y;
+
+    if (dragging === "draw" && drawingRect) {
+      const x = Math.min(dragStart.x, pt.x);
+      const y = Math.min(dragStart.y, pt.y);
+      const width = Math.abs(pt.x - dragStart.x);
+      const height = Math.abs(pt.y - dragStart.y);
+      drawingRect = { ...drawingRect, x, y, width, height };
+    } else if (dragging === "move" && selectedId && dragOrigRect) {
+      onMasksChange(
+        masks.map((m) =>
+          m.id === selectedId
+            ? { ...m, x: dragOrigRect!.x + dx, y: dragOrigRect!.y + dy }
+            : m
+        )
+      );
+    } else if (dragging === "resize" && selectedId && dragOrigRect && resizeHandle) {
+      const updated = computeResize(dragOrigRect, resizeHandle, dx, dy);
+      onMasksChange(
+        masks.map((m) => (m.id === selectedId ? { ...m, ...updated } : m))
+      );
+    }
   }
 
   function handleMouseUp() {
-    if (dragging && drawingRect && drawingRect.width > 3 && drawingRect.height > 3) {
+    if (dragging === "draw" && drawingRect && drawingRect.width > 3 && drawingRect.height > 3) {
       onMasksChange([...masks, drawingRect]);
       selectedId = drawingRect.id;
     }
     drawingRect = null;
-    dragging = false;
+    dragging = null;
     dragStart = null;
+    dragOrigRect = null;
+    resizeHandle = null;
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -79,6 +131,60 @@
       onMasksChange(masks.filter((m) => m.id !== selectedId));
       selectedId = null;
     }
+  }
+
+  // リサイズハンドルのヒットテスト (8方向)
+  const HANDLE_SIZE = 6;
+  function hitTestHandle(mask: MaskRect, px: number, py: number): string | null {
+    const { x, y, width: w, height: h } = mask;
+    const handles: [string, number, number][] = [
+      ["nw", x, y], ["n", x + w / 2, y], ["ne", x + w, y],
+      ["w", x, y + h / 2], ["e", x + w, y + h / 2],
+      ["sw", x, y + h], ["s", x + w / 2, y + h], ["se", x + w, y + h],
+    ];
+    for (const [name, hx, hy] of handles) {
+      if (Math.abs(px - hx) <= HANDLE_SIZE && Math.abs(py - hy) <= HANDLE_SIZE) return name;
+    }
+    return null;
+  }
+
+  // ハンドル方向に応じたリサイズ計算 (最小サイズ保証)
+  function computeResize(
+    orig: { x: number; y: number; width: number; height: number },
+    handle: string,
+    dx: number,
+    dy: number
+  ): { x: number; y: number; width: number; height: number } {
+    let { x, y, width, height } = orig;
+    const minSize = 5;
+
+    if (handle.includes("w")) {
+      const newX = Math.min(x + dx, x + width - minSize);
+      width = width - (newX - x);
+      x = newX;
+    }
+    if (handle.includes("e")) {
+      width = Math.max(minSize, width + dx);
+    }
+    if (handle.includes("n")) {
+      const newY = Math.min(y + dy, y + height - minSize);
+      height = height - (newY - y);
+      y = newY;
+    }
+    if (handle.includes("s")) {
+      height = Math.max(minSize, height + dy);
+    }
+    return { x, y, width, height };
+  }
+
+  function handleCursorForHandle(handle: string): string {
+    const map: Record<string, string> = {
+      nw: "nwse-resize", se: "nwse-resize",
+      ne: "nesw-resize", sw: "nesw-resize",
+      n: "ns-resize", s: "ns-resize",
+      e: "ew-resize", w: "ew-resize",
+    };
+    return map[handle] ?? "default";
   }
 
   let allMasks = $derived(drawingRect ? [...masks, drawingRect] : masks);
@@ -178,6 +284,29 @@
         x={mask.x} y={mask.y} width={mask.width} height={mask.height}
         fill="none" stroke="#0066cc" stroke-width="2" stroke-dasharray="4 2"
       />
+      <!-- 8方向リサイズハンドル -->
+      {#each [
+        ["nw", mask.x, mask.y],
+        ["n", mask.x + mask.width / 2, mask.y],
+        ["ne", mask.x + mask.width, mask.y],
+        ["w", mask.x, mask.y + mask.height / 2],
+        ["e", mask.x + mask.width, mask.y + mask.height / 2],
+        ["sw", mask.x, mask.y + mask.height],
+        ["s", mask.x + mask.width / 2, mask.y + mask.height],
+        ["se", mask.x + mask.width, mask.y + mask.height],
+      ] as [name, hx, hy]}
+        <rect
+          x={Number(hx) - HANDLE_SIZE / 2}
+          y={Number(hy) - HANDLE_SIZE / 2}
+          width={HANDLE_SIZE}
+          height={HANDLE_SIZE}
+          fill="white"
+          stroke="#0066cc"
+          stroke-width="1.5"
+          style:cursor={handleCursorForHandle(String(name))}
+          class="handle"
+        />
+      {/each}
     {/if}
   {/each}
 </svg>
@@ -189,5 +318,9 @@
     left: 0;
     width: 100%;
     height: 100%;
+  }
+
+  .handle {
+    pointer-events: auto;
   }
 </style>

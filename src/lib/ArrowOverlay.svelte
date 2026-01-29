@@ -98,10 +98,15 @@
       }
     }
 
-    // Click existing arrow to select (when tool not active)
+    // Click existing arrow to select
+    const hit = [...arrows].reverse().find((a) => distToArrow(a, pt.x, pt.y) < a.thickness + 6);
+    if (hit) {
+      selectedId = hit.id;
+      return;
+    }
+
     if (!toolActive) {
-      const hit = [...arrows].reverse().find((a) => distToArrow(a, pt.x, pt.y) < a.thickness + 6);
-      selectedId = hit?.id ?? null;
+      selectedId = null;
       return;
     }
 

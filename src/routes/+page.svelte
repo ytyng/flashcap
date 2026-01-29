@@ -7,6 +7,9 @@
   import { startDrag } from "@crabnebula/tauri-plugin-drag";
   import ArrowOverlay from "$lib/ArrowOverlay.svelte";
   import MaskOverlay from "$lib/MaskOverlay.svelte";
+
+  let arrowOverlayRef = $state<ReturnType<typeof ArrowOverlay> | null>(null);
+  let maskOverlayRef = $state<ReturnType<typeof MaskOverlay> | null>(null);
   import type { Arrow, ArrowSettings, MaskRect, MaskSettings } from "$lib/types";
 
   interface ScreenshotResult {
@@ -342,12 +345,22 @@
 
   function toggleArrowTool() {
     arrowToolActive = !arrowToolActive;
-    if (arrowToolActive) maskToolActive = false;
+    if (arrowToolActive) {
+      maskToolActive = false;
+      maskOverlayRef?.deselect();
+    } else {
+      arrowOverlayRef?.deselect();
+    }
   }
 
   function toggleMaskTool() {
     maskToolActive = !maskToolActive;
-    if (maskToolActive) arrowToolActive = false;
+    if (maskToolActive) {
+      arrowToolActive = false;
+      arrowOverlayRef?.deselect();
+    } else {
+      maskOverlayRef?.deselect();
+    }
   }
 </script>
 
@@ -523,6 +536,7 @@
           class="max-w-full max-h-[calc(100vh-80px)] object-contain rounded shadow-[0_4px_20px_rgba(0,0,0,0.5)] block"
         />
         <MaskOverlay
+          bind:this={maskOverlayRef}
           {masks}
           settings={maskSettings}
           toolActive={maskToolActive}
@@ -531,6 +545,7 @@
           onMasksChange={(newMasks) => (masks = newMasks)}
         />
         <ArrowOverlay
+          bind:this={arrowOverlayRef}
           {arrows}
           settings={arrowSettings}
           toolActive={arrowToolActive}
