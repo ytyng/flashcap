@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { writeText, writeImage } from "@tauri-apps/plugin-clipboard-manager";
+  import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import ArrowOverlay from "$lib/ArrowOverlay.svelte";
   import type { Arrow, ArrowSettings } from "$lib/types";
 
@@ -199,6 +200,10 @@
     setTimeout(() => (copyImageSuccess = false), 3000);
   }
 
+  async function openFolder() {
+    await revealItemInDir("/tmp/flashcap/");
+  }
+
   function toggleArrowTool() {
     arrowToolActive = !arrowToolActive;
   }
@@ -282,6 +287,13 @@
         {:else}
           <i class="bi bi-image"></i>
         {/if}
+      </button>
+      <button
+        class="tool-btn"
+        onclick={openFolder}
+        title="Open save folder"
+      >
+        <i class="bi bi-folder2-open"></i>
       </button>
     {/if}
 
