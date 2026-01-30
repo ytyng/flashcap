@@ -64,38 +64,12 @@ fn get_screenshot_path(app: &tauri::AppHandle) -> String {
     dir.join(filename).to_string_lossy().to_string()
 }
 
-#[tauri::command]
-fn take_screenshot_interactive(
-    app: tauri::AppHandle,
-    window: tauri::Window,
-) -> Result<ScreenshotResult, String> {
-    let file_path = get_screenshot_path(&app);
-
-    // Hide the app window so it doesn't appear in the screenshot
-    let _ = window.hide();
-    // ウィンドウが完全に隠れるまで少し待つ
-    std::thread::sleep(std::time::Duration::from_millis(300));
-
-    let status = Command::new("screencapture")
-        .args(["-i", &file_path])
-        .status()
-        .map_err(|e| {
-            let _ = window.show();
-            format!("Failed to run screencapture: {}", e)
-        })?;
-
-    // ウィンドウを再表示
-    let _ = window.show();
-
-    if !status.success() {
-        return Err("Screenshot was cancelled".to_string());
-    }
-
+/// screencapture 完了後のファイルを読み込んで ScreenshotResult を生成
+fn load_screenshot_result(file_path: String) -> Result<ScreenshotResult, String> {
     if !std::path::Path::new(&file_path).exists() {
         return Err("Screenshot was cancelled".to_string());
     }
 
-    // 絶対パスに解決
     let absolute_path = std::fs::canonicalize(&file_path)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or(file_path);
@@ -112,6 +86,76 @@ fn take_screenshot_interactive(
         data: STANDARD.encode(&png_data),
         file_path: absolute_path,
     })
+}
+
+#[tauri::command]
+fn take_screenshot_interactive(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<ScreenshotResult, String> {
+    let file_path = get_screenshot_path(&app);
+
+    // スクリーンショットに自身のウィンドウが映らないように隠す
+    let _ = window.hide();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    let status = Command::new("screencapture")
+        .args(["-i", &file_path])
+        .status()
+        .map_err(|e| {
+            let _ = window.show();
+            format!("Failed to run screencapture: {}", e)
+        })?;
+
+    let _ = window.show();
+
+    if !status.success() {
+        return Err("Screenshot was cancelled".to_string());
+    }
+
+    load_screenshot_result(file_path)
+}
+
+/// 設定からタイマー秒数を取得（デフォルト5秒）
+fn get_timer_delay(app: &tauri::AppHandle) -> u32 {
+    app.store("settings.json")
+        .ok()
+        .and_then(|store| store.get("timer_delay"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(5)
+}
+
+/// タイマー付きスクリーンショット
+/// async にすることで -T 待機中にアプリがフリーズしない
+#[tauri::command]
+async fn take_screenshot_timer(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+) -> Result<ScreenshotResult, String> {
+    let file_path = get_screenshot_path(&app);
+    let delay = get_timer_delay(&app).to_string();
+
+    // スクリーンショットに自身のウィンドウが映らないように隠す
+    let _ = window.hide();
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    let status = tokio::process::Command::new("screencapture")
+        .args(["-i", "-T", &delay, &file_path])
+        .status()
+        .await
+        .map_err(|e| {
+            let _ = window.show();
+            format!("Failed to run screencapture: {}", e)
+        })?;
+
+    let _ = window.show();
+
+    if !status.success() {
+        return Err("Screenshot was cancelled".to_string());
+    }
+
+    load_screenshot_result(file_path)
 }
 
 /// base64 PNG データをファイルに書き出す
@@ -241,7 +285,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![take_screenshot_interactive, write_image_to_file])
+        .invoke_handler(tauri::generate_handler![take_screenshot_interactive, take_screenshot_timer, write_image_to_file])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {

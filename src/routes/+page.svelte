@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { load } from "@tauri-apps/plugin-store";
   import { writeText, writeImage } from "@tauri-apps/plugin-clipboard-manager";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { startDrag } from "@crabnebula/tauri-plugin-drag";
@@ -20,6 +21,7 @@
   }
 
   let isCapturing = $state(false);
+  let timerDelay = $state(5);
   let imageUrl = $state<string | null>(null);
   let imageBase64 = $state<string | null>(null);
   let filePath = $state<string | null>(null);
@@ -78,6 +80,12 @@
   }
 
   onMount(() => {
+    // タイマー設定を読み込み
+    load("settings.json").then(async (settingsStore) => {
+      const savedTimer = await settingsStore.get<number>("timer_delay");
+      if (savedTimer != null) timerDelay = savedTimer;
+    });
+
     // Restore arrow settings from localStorage
     const saved = localStorage.getItem(ARROW_SETTINGS_KEY);
     if (saved) {
@@ -146,10 +154,10 @@
     localStorage.setItem(MASK_SETTINGS_KEY, JSON.stringify({ mode, color }));
   });
 
-  async function captureScreen() {
+  async function captureScreen(command: string = "take_screenshot_interactive") {
     isCapturing = true;
     try {
-      const result = await invoke<ScreenshotResult>("take_screenshot_interactive");
+      const result = await invoke<ScreenshotResult>(command);
       imageBase64 = result.data;
       imageUrl = `data:image/png;base64,${result.data}`;
       filePath = result.file_path;
@@ -543,8 +551,16 @@
     <div class="flex-1"></div>
 
     <button
+      class="tool-btn"
+      onclick={() => captureScreen("take_screenshot_timer")}
+      disabled={isCapturing}
+      data-tooltip="Timer capture ({timerDelay}s)"
+    >
+      <i class="bi bi-stopwatch"></i>
+    </button>
+    <button
       class="tool-btn bg-[#0066cc] text-white hover:bg-[#0077ee]"
-      onclick={captureScreen}
+      onclick={() => captureScreen()}
       disabled={isCapturing}
       data-tooltip="Capture new area"
     >

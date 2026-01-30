@@ -7,6 +7,7 @@
 
   let saveMode = $state<SaveMode>("tmp");
   let customPath = $state("");
+  let timerDelay = $state(5);
   let store = $state<Store | null>(null);
 
   onMount(async () => {
@@ -22,6 +23,8 @@
         customPath = saved.slice("custom:".length);
       }
     }
+    const savedTimer = await store.get<number>("timer_delay");
+    if (savedTimer != null) timerDelay = savedTimer;
   });
 
   async function save() {
@@ -45,6 +48,13 @@
       saveMode = "custom";
       await save();
     }
+  }
+
+  async function onTimerDelayChange(value: number) {
+    timerDelay = value;
+    if (!store) return;
+    await store.set("timer_delay", value);
+    await store.save();
   }
 
   async function onModeChange(mode: SaveMode) {
@@ -124,5 +134,24 @@
         </button>
       </div>
     {/if}
+  </section>
+
+  <section class="mt-8">
+    <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+      Timer Capture
+    </h3>
+    <div class="flex items-center gap-3 px-3 py-2.5">
+      <label for="timerDelay" class="text-sm font-medium">Delay</label>
+      <select
+        id="timerDelay"
+        value={timerDelay}
+        onchange={(e) => onTimerDelayChange(Number((e.target as HTMLSelectElement).value))}
+        class="bg-[#2d2d2d] text-white text-sm rounded-md px-3 py-1.5 border border-[#3d3d3d] cursor-pointer"
+      >
+        {#each [3, 5, 10] as sec}
+          <option value={sec}>{sec} seconds</option>
+        {/each}
+      </select>
+    </div>
   </section>
 </div>
