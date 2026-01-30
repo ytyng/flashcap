@@ -4,12 +4,15 @@ A macOS screenshot capture & annotation app built with Tauri 2.x and SvelteKit.
 
 ## Features
 
-- Screenshot capture
-- Arrow annotation tool
-- Clipboard integration (copy screenshot to clipboard)
-- Keyboard shortcuts (ESC to quit)
-- Auto-save to `/tmp/flashcap/`
-- Open save folder from toolbar
+- Screenshot capture (interactive area selection)
+- Timer capture (configurable delay: 3/5/10 seconds)
+- Arrow annotation tool (color, thickness, white stroke, drop shadow)
+- Mask tool (mosaic, blur, fill) with resize/move handles
+- Clipboard integration (copy path or image)
+- Drag & drop to external apps (e.g. Slack)
+- Configurable save location (tmp / macOS default / custom folder)
+- Keyboard shortcuts (ESC to quit, Delete to remove selected annotation)
+- Preferences window (save location, timer delay)
 
 ## Tech Stack
 
@@ -46,11 +49,16 @@ pnpm check
 ## Project Structure
 
 ```
-src/               # SvelteKit frontend
-  routes/          # Pages
-  lib/             # Shared components & types
-src-tauri/         # Rust backend (Tauri)
-  src/             # Rust source
+src/                          # SvelteKit frontend
+  routes/
+    +page.svelte              # Main capture UI
+    preferences/+page.svelte  # Preferences page
+  lib/
+    ArrowOverlay.svelte       # Arrow annotation overlay
+    MaskOverlay.svelte        # Mask (mosaic/blur/fill) overlay
+    types.ts                  # Shared types
+src-tauri/                    # Rust backend (Tauri)
+  src/lib.rs                  # Tauri commands & app setup
 ```
 
 ## Note for AI Assistants
