@@ -8,9 +8,10 @@
     interactive: boolean;
     scale: number;
     onMasksChange: (masks: MaskRect[]) => void;
+    onBeforeMutate?: () => void;
   }
 
-  let { masks, settings, toolActive, interactive, scale, onMasksChange }: Props = $props();
+  let { masks, settings, toolActive, interactive, scale, onMasksChange, onBeforeMutate }: Props = $props();
 
   let selectedId = $state<string | null>(null);
   let dragging = $state<"draw" | "move" | "resize" | null>(null);
@@ -39,6 +40,7 @@
       if (sel) {
         const handle = hitTestHandle(sel, pt.x, pt.y);
         if (handle) {
+          onBeforeMutate?.();
           resizeHandle = handle;
           dragging = "resize";
           dragStart = pt;
@@ -46,6 +48,7 @@
           return;
         }
         if (pt.x >= sel.x && pt.x <= sel.x + sel.width && pt.y >= sel.y && pt.y <= sel.y + sel.height) {
+          onBeforeMutate?.();
           dragging = "move";
           dragStart = pt;
           dragOrigRect = { x: sel.x, y: sel.y, width: sel.width, height: sel.height };
@@ -69,6 +72,7 @@
     }
 
     // 新しいマスクを描画開始
+    onBeforeMutate?.();
     dragStart = pt;
     drawingRect = {
       id: crypto.randomUUID(),
@@ -178,6 +182,7 @@
     if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
       e.preventDefault();
       e.stopPropagation();
+      onBeforeMutate?.();
       onMasksChange(masks.filter((m) => m.id !== selectedId));
       selectedId = null;
     }

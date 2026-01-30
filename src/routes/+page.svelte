@@ -50,6 +50,23 @@
     mosaicBlockSize: 7,
   });
 
+  // Undo history
+  let undoHistory = $state<{ arrows: Arrow[]; masks: MaskRect[] }[]>([]);
+
+  function pushUndo() {
+    undoHistory.push({
+      arrows: structuredClone($state.snapshot(arrows)),
+      masks: structuredClone($state.snapshot(masks)),
+    });
+  }
+
+  function undo() {
+    const entry = undoHistory.pop();
+    if (!entry) return;
+    arrows = entry.arrows;
+    masks = entry.masks;
+  }
+
   // Image element reference for composite rendering
   let imgEl = $state<HTMLImageElement | null>(null);
 
@@ -145,6 +162,9 @@
       } else if (e.metaKey && e.key === "c") {
         e.preventDefault();
         copyPath();
+      } else if (e.metaKey && e.key === "z") {
+        e.preventDefault();
+        undo();
       }
     }
     window.addEventListener("keydown", handleKeydown);
@@ -178,6 +198,7 @@
       filePath = result.file_path;
       arrows = [];
       masks = [];
+      undoHistory = [];
       naturalWidth = 0;
       naturalHeight = 0;
     } catch (e) {
@@ -655,6 +676,7 @@
           toolActive={maskToolActive}
           interactive={!arrowToolActive}
           scale={displayScale}
+          onBeforeMutate={pushUndo}
           onMasksChange={(newMasks) => (masks = newMasks)}
         />
         <ArrowOverlay
@@ -664,6 +686,7 @@
           toolActive={arrowToolActive}
           interactive={!maskToolActive}
           scale={displayScale}
+          onBeforeMutate={pushUndo}
           onArrowsChange={(newArrows) => (arrows = newArrows)}
         />
       </div>

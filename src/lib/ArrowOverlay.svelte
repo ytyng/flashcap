@@ -8,9 +8,10 @@
     interactive: boolean;
     scale: number;
     onArrowsChange: (arrows: Arrow[]) => void;
+    onBeforeMutate?: () => void;
   }
 
-  let { arrows, settings, toolActive, interactive, scale, onArrowsChange }: Props = $props();
+  let { arrows, settings, toolActive, interactive, scale, onArrowsChange, onBeforeMutate }: Props = $props();
 
   let selectedId = $state<string | null>(null);
   let dragging = $state<"draw" | "move-start" | "move-end" | null>(null);
@@ -90,10 +91,12 @@
       const sel = arrows.find((a) => a.id === selectedId);
       if (sel) {
         if (nearPoint(pt.x, pt.y, sel.startX, sel.startY)) {
+          onBeforeMutate?.();
           dragging = "move-start";
           return;
         }
         if (nearPoint(pt.x, pt.y, sel.endX, sel.endY)) {
+          onBeforeMutate?.();
           dragging = "move-end";
           return;
         }
@@ -113,6 +116,7 @@
     }
 
     // Start drawing new arrow
+    onBeforeMutate?.();
     const id = crypto.randomUUID();
     drawingArrow = {
       id,
@@ -192,6 +196,7 @@
     if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
       e.preventDefault();
       e.stopPropagation();
+      onBeforeMutate?.();
       onArrowsChange(arrows.filter((a) => a.id !== selectedId));
       selectedId = null;
     }
