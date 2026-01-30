@@ -1,6 +1,8 @@
 # FlashCap
 
-A macOS screenshot capture & annotation app built with Tauri 2.x and SvelteKit.
+A macOS screenshot capture & annotation app.
+
+![](./docs/flashcap-20260130-095844.png)
 
 ## Features
 

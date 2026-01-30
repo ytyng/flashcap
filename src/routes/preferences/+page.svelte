@@ -8,6 +8,7 @@
   let saveMode = $state<SaveMode>("tmp");
   let customPath = $state("");
   let timerDelay = $state(5);
+  let excludeShadow = $state(true);
   let store = $state<Store | null>(null);
 
   onMount(async () => {
@@ -25,6 +26,8 @@
     }
     const savedTimer = await store.get<number>("timer_delay");
     if (savedTimer != null) timerDelay = savedTimer;
+    const savedShadow = await store.get<boolean>("exclude_shadow");
+    if (savedShadow != null) excludeShadow = savedShadow;
   });
 
   async function save() {
@@ -48,6 +51,13 @@
       saveMode = "custom";
       await save();
     }
+  }
+
+  async function onExcludeShadowChange(value: boolean) {
+    excludeShadow = value;
+    if (!store) return;
+    await store.set("exclude_shadow", value);
+    await store.save();
   }
 
   async function onTimerDelayChange(value: number) {
@@ -138,10 +148,10 @@
 
   <section class="mt-8">
     <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
-      Timer Capture
+      Capture
     </h3>
     <div class="flex items-center gap-3 px-3 py-2.5">
-      <label for="timerDelay" class="text-sm font-medium">Delay</label>
+      <label for="timerDelay" class="text-sm font-medium">Timer delay</label>
       <select
         id="timerDelay"
         value={timerDelay}
@@ -153,5 +163,17 @@
         {/each}
       </select>
     </div>
+    <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-[#2d2d2d] transition-colors">
+      <input
+        type="checkbox"
+        checked={excludeShadow}
+        onchange={(e) => onExcludeShadowChange((e.target as HTMLInputElement).checked)}
+        class="accent-blue-600"
+      />
+      <div>
+        <div class="text-sm font-medium">Exclude window shadow</div>
+        <div class="text-xs text-gray-500 mt-0.5">Remove drop shadow when capturing a window</div>
+      </div>
+    </label>
   </section>
 </div>

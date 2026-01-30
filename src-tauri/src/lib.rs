@@ -99,8 +99,14 @@ fn take_screenshot_interactive(
     let _ = window.hide();
     std::thread::sleep(std::time::Duration::from_millis(300));
 
+    let mut args = vec!["-i"];
+    if get_exclude_shadow(&app) {
+        args.push("-o");
+    }
+    args.push(&file_path);
+
     let status = Command::new("screencapture")
-        .args(["-i", &file_path])
+        .args(&args)
         .status()
         .map_err(|e| {
             let _ = window.show();
@@ -114,6 +120,15 @@ fn take_screenshot_interactive(
     }
 
     load_screenshot_result(file_path)
+}
+
+/// ウィンドウキャプチャー時のドロップシャドウを除外するか（デフォルト true）
+fn get_exclude_shadow(app: &tauri::AppHandle) -> bool {
+    app.store("settings.json")
+        .ok()
+        .and_then(|store| store.get("exclude_shadow"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
 }
 
 /// 設定からタイマー秒数を取得（デフォルト5秒）
@@ -140,8 +155,14 @@ async fn take_screenshot_timer(
     let _ = window.hide();
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
+    let mut args = vec!["-i".to_string()];
+    if get_exclude_shadow(&app) {
+        args.push("-o".to_string());
+    }
+    args.extend(["-T".to_string(), delay, file_path.clone()]);
+
     let status = tokio::process::Command::new("screencapture")
-        .args(["-i", "-T", &delay, &file_path])
+        .args(&args)
         .status()
         .await
         .map_err(|e| {
