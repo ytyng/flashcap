@@ -16,6 +16,7 @@
   let dragging = $state<"draw" | "move" | "resize" | null>(null);
   let drawingRect = $state<MaskRect | null>(null);
   let dragStart = $state<{ x: number; y: number } | null>(null);
+  let hoverCursor = $state<string>("default");
 
   // move/resize 用の初期状態
   let dragOrigRect = $state<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -82,10 +83,59 @@
     selectedId = null;
   }
 
+  function updateHoverCursor(pt: { x: number; y: number }) {
+    if (dragging) return;
+
+    // 選択中マスクのリサイズハンドル上 → resize cursor
+    if (selectedId) {
+      const sel = masks.find((m) => m.id === selectedId);
+      if (sel) {
+        const handle = hitTestHandle(sel, pt.x, pt.y);
+        if (handle) {
+          hoverCursor = handleCursorForHandle(handle);
+          return;
+        }
+        // 選択中マスク本体上 → move
+        // 選択枠の辺上 → move
+        const edgeThreshold = HANDLE_SIZE / scale;
+        const inX = pt.x >= sel.x - edgeThreshold && pt.x <= sel.x + sel.width + edgeThreshold;
+        const inY = pt.y >= sel.y - edgeThreshold && pt.y <= sel.y + sel.height + edgeThreshold;
+        const nearLeft = Math.abs(pt.x - sel.x) <= edgeThreshold;
+        const nearRight = Math.abs(pt.x - (sel.x + sel.width)) <= edgeThreshold;
+        const nearTop = Math.abs(pt.y - sel.y) <= edgeThreshold;
+        const nearBottom = Math.abs(pt.y - (sel.y + sel.height)) <= edgeThreshold;
+        if ((nearLeft && inY) || (nearRight && inY) || (nearTop && inX) || (nearBottom && inX)) {
+          hoverCursor = "move";
+          return;
+        }
+        // マスク内部 → move
+        if (pt.x >= sel.x && pt.x <= sel.x + sel.width && pt.y >= sel.y && pt.y <= sel.y + sel.height) {
+          hoverCursor = "move";
+          return;
+        }
+      }
+    }
+
+    // 既存マスク上 → pointer（選択可能）
+    const hit = [...masks].reverse().find((m) =>
+      pt.x >= m.x && pt.x <= m.x + m.width && pt.y >= m.y && pt.y <= m.y + m.height
+    );
+    if (hit) {
+      hoverCursor = "pointer";
+      return;
+    }
+
+    hoverCursor = toolActive ? "crosshair" : "default";
+  }
+
   function handleMouseMove(e: MouseEvent) {
-    if (!dragging || !dragStart) return;
     const pt = getSvgCoords(e);
     if (!pt) return;
+
+    if (!dragging || !dragStart) {
+      updateHoverCursor(pt);
+      return;
+    }
 
     const dx = pt.x - dragStart.x;
     const dy = pt.y - dragStart.y;
@@ -246,7 +296,7 @@
   onmousedown={handleMouseDown}
   onmousemove={handleMouseMove}
   onmouseup={handleMouseUp}
-  style:cursor={toolActive ? "crosshair" : "default"}
+  style:cursor={dragging === "move" ? "move" : dragging === "resize" && resizeHandle ? handleCursorForHandle(resizeHandle) : hoverCursor}
   style:pointer-events={interactive ? "auto" : "none"}
 >
   {#each allMasks as mask (mask.id)}

@@ -15,6 +15,7 @@
   let selectedId = $state<string | null>(null);
   let dragging = $state<"draw" | "move-start" | "move-end" | null>(null);
   let drawingArrow = $state<Arrow | null>(null);
+  let hoverCursor = $state<string>("default");
 
   function headSize(thickness: number): number {
     return thickness * 4;
@@ -125,10 +126,40 @@
     selectedId = null;
   }
 
+  function updateHoverCursor(pt: { x: number; y: number }) {
+    // ドラッグ中はカーソルを変えない
+    if (dragging) return;
+
+    // 選択中の矢印のエンドポイント上 → grab
+    if (selectedId) {
+      const sel = arrows.find((a) => a.id === selectedId);
+      if (sel) {
+        if (nearPoint(pt.x, pt.y, sel.startX, sel.startY) ||
+            nearPoint(pt.x, pt.y, sel.endX, sel.endY)) {
+          hoverCursor = "move";
+          return;
+        }
+      }
+    }
+
+    // 既存の矢印の上 → pointer（再選択可能）
+    const hit = [...arrows].reverse().find((a) => distToArrow(a, pt.x, pt.y) < a.thickness + 6 / scale);
+    if (hit) {
+      hoverCursor = "pointer";
+      return;
+    }
+
+    hoverCursor = toolActive ? "crosshair" : "default";
+  }
+
   function handleMouseMove(e: MouseEvent) {
-    if (!dragging) return;
     const pt = getSvgCoords(e);
     if (!pt) return;
+
+    if (!dragging) {
+      updateHoverCursor(pt);
+      return;
+    }
 
     if (dragging === "draw" && drawingArrow) {
       drawingArrow = { ...drawingArrow, endX: pt.x, endY: pt.y };
@@ -181,7 +212,7 @@
   onmousedown={handleMouseDown}
   onmousemove={handleMouseMove}
   onmouseup={handleMouseUp}
-  style:cursor={toolActive ? "crosshair" : "default"}
+  style:cursor={dragging === "move-start" || dragging === "move-end" ? "move" : hoverCursor}
   style:pointer-events={interactive ? "auto" : "none"}
 >
   <defs>

@@ -562,7 +562,8 @@
           bind:this={imgEl}
           src={imageUrl}
           alt="Screenshot"
-          class="block w-full h-full"
+          class="block w-full h-full select-none pointer-events-none"
+          draggable="false"
           onload={onImageLoad}
         />
         <MaskOverlay
