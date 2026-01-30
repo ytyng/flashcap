@@ -32,4 +32,6 @@ export interface MaskRect {
 export interface MaskSettings {
   mode: MaskMode;
   color: string;
+  blurRadius: number;
+  mosaicBlockSize: number;
 }

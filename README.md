@@ -1,8 +1,10 @@
 # FlashCap
 
+![](./src-tauri/icons/128x128@2x.png)
+
 A macOS screenshot capture & annotation app.
 
-![](./docs/flashcap-20260130-095844.png)
+![](./documents/images/flashcap-20260130-104529.png)
 
 ## Features
 

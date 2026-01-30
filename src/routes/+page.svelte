@@ -46,6 +46,8 @@
   let maskSettings = $state<MaskSettings>({
     mode: "mosaic",
     color: "#000000",
+    blurRadius: 5,
+    mosaicBlockSize: 7,
   });
 
   // Image element reference for composite rendering
@@ -82,8 +84,21 @@
   onMount(() => {
     // タイマー設定を読み込み
     load("settings.json").then(async (settingsStore) => {
-      const savedTimer = await settingsStore.get<number>("timer_delay");
-      if (savedTimer != null) timerDelay = savedTimer;
+      const applyStoreSettings = async () => {
+        const savedTimer = await settingsStore.get<number>("timer_delay");
+        if (savedTimer != null) timerDelay = savedTimer;
+        const savedBlur = await settingsStore.get<number>("blur_radius");
+        if (savedBlur != null) maskSettings.blurRadius = savedBlur;
+        const savedMosaic = await settingsStore.get<number>("mosaic_block_size");
+        if (savedMosaic != null) maskSettings.mosaicBlockSize = savedMosaic;
+      };
+      await applyStoreSettings();
+      // Preferences ウィンドウでの変更を即時反映
+      settingsStore.onChange(async (key) => {
+        if (["timer_delay", "blur_radius", "mosaic_block_size"].includes(key)) {
+          await applyStoreSettings();
+        }
+      });
     });
 
     // Restore arrow settings from localStorage
@@ -181,6 +196,67 @@
     await writeText(filePath);
     copyPathSuccess = true;
     setTimeout(() => (copyPathSuccess = false), 3000);
+  }
+
+  /** Box blur を1回適用（水平→垂直の分離フィルタ） */
+  function boxBlurPass(data: Uint8ClampedArray, w: number, h: number, radius: number) {
+    const size = radius * 2 + 1;
+    const inv = 1 / size;
+    const tmp = new Uint8ClampedArray(data.length);
+
+    // 水平パス
+    for (let y = 0; y < h; y++) {
+      let ri = y * w * 4;
+      let sumR = 0, sumG = 0, sumB = 0, sumA = 0;
+      // 初期ウィンドウ: [-radius, radius]
+      for (let x = -radius; x <= radius; x++) {
+        const idx = (y * w + Math.min(Math.max(x, 0), w - 1)) * 4;
+        sumR += data[idx]; sumG += data[idx + 1]; sumB += data[idx + 2]; sumA += data[idx + 3];
+      }
+      for (let x = 0; x < w; x++) {
+        tmp[ri] = (sumR * inv + 0.5) | 0;
+        tmp[ri + 1] = (sumG * inv + 0.5) | 0;
+        tmp[ri + 2] = (sumB * inv + 0.5) | 0;
+        tmp[ri + 3] = (sumA * inv + 0.5) | 0;
+        ri += 4;
+        // スライディングウィンドウ: 右端を追加、左端を除去
+        const addIdx = (y * w + Math.min(x + radius + 1, w - 1)) * 4;
+        const remIdx = (y * w + Math.max(x - radius, 0)) * 4;
+        sumR += data[addIdx] - data[remIdx];
+        sumG += data[addIdx + 1] - data[remIdx + 1];
+        sumB += data[addIdx + 2] - data[remIdx + 2];
+        sumA += data[addIdx + 3] - data[remIdx + 3];
+      }
+    }
+
+    // 垂直パス
+    for (let x = 0; x < w; x++) {
+      let sumR = 0, sumG = 0, sumB = 0, sumA = 0;
+      for (let y = -radius; y <= radius; y++) {
+        const idx = (Math.min(Math.max(y, 0), h - 1) * w + x) * 4;
+        sumR += tmp[idx]; sumG += tmp[idx + 1]; sumB += tmp[idx + 2]; sumA += tmp[idx + 3];
+      }
+      for (let y = 0; y < h; y++) {
+        const wi = (y * w + x) * 4;
+        data[wi] = (sumR * inv + 0.5) | 0;
+        data[wi + 1] = (sumG * inv + 0.5) | 0;
+        data[wi + 2] = (sumB * inv + 0.5) | 0;
+        data[wi + 3] = (sumA * inv + 0.5) | 0;
+        const addIdx = (Math.min(y + radius + 1, h - 1) * w + x) * 4;
+        const remIdx = (Math.max(y - radius, 0) * w + x) * 4;
+        sumR += tmp[addIdx] - tmp[remIdx];
+        sumG += tmp[addIdx + 1] - tmp[remIdx + 1];
+        sumB += tmp[addIdx + 2] - tmp[remIdx + 2];
+        sumA += tmp[addIdx + 3] - tmp[remIdx + 3];
+      }
+    }
+  }
+
+  /** Box blur を複数回適用して Gaussian blur を近似 */
+  function boxBlur(imageData: ImageData, radius: number, passes: number = 3) {
+    for (let i = 0; i < passes; i++) {
+      boxBlurPass(imageData.data, imageData.width, imageData.height, radius);
+    }
   }
 
   // Render arrows onto a canvas and return PNG bytes
@@ -281,24 +357,14 @@
             ctx.fillStyle = mask.color;
             ctx.fillRect(mx, my, mw, mh);
           } else if (mask.mode === "blur") {
-            // Extract region, blur via OffscreenCanvas, draw back
+            // WebKit (Tauri WKWebView) は ctx.filter 非対応のため、
+            // box blur 3回適用で Gaussian blur を近似
             const regionData = ctx.getImageData(mx, my, mw, mh);
-            const offscreen = document.createElement("canvas");
-            offscreen.width = mw;
-            offscreen.height = mh;
-            const offCtx = offscreen.getContext("2d")!;
-            offCtx.putImageData(regionData, 0, 0);
-            // Re-draw with blur
-            const blurred = document.createElement("canvas");
-            blurred.width = mw;
-            blurred.height = mh;
-            const blurCtx = blurred.getContext("2d")!;
-            blurCtx.filter = "blur(10px)";
-            blurCtx.drawImage(offscreen, 0, 0);
-            ctx.drawImage(blurred, mx, my);
+            boxBlur(regionData, maskSettings.blurRadius, 3);
+            ctx.putImageData(regionData, mx, my);
           } else if (mask.mode === "mosaic") {
             // Pixelate: scale down then scale up
-            const blockSize = 10;
+            const blockSize = maskSettings.mosaicBlockSize;
             const regionData = ctx.getImageData(mx, my, mw, mh);
             const small = document.createElement("canvas");
             const sw = Math.max(1, Math.ceil(mw / blockSize));

@@ -263,7 +263,7 @@
     sCtx.drawImage(imgInParent, sx, sy, sw, sh, 0, 0, sw, sh);
 
     // 縮小（ブロックサイズ分の1に）
-    const blockSize = 10;
+    const blockSize = settings.mosaicBlockSize;
     const tw = Math.max(1, Math.ceil(sw / blockSize));
     const th = Math.max(1, Math.ceil(sh / blockSize));
     const tiny = document.createElement("canvas");
@@ -306,7 +306,7 @@
       <foreignObject x={mask.x} y={mask.y} width={mask.width} height={mask.height}>
         <div
           xmlns="http://www.w3.org/1999/xhtml"
-          style="width:100%;height:100%;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);"
+          style="width:100%;height:100%;backdrop-filter:blur({settings.blurRadius}px);-webkit-backdrop-filter:blur({settings.blurRadius}px);"
         ></div>
       </foreignObject>
     {:else if mask.mode === "fill"}

@@ -9,6 +9,8 @@
   let customPath = $state("");
   let timerDelay = $state(5);
   let excludeShadow = $state(true);
+  let blurRadius = $state(5);
+  let mosaicBlockSize = $state(7);
   let store = $state<Store | null>(null);
 
   onMount(async () => {
@@ -28,6 +30,10 @@
     if (savedTimer != null) timerDelay = savedTimer;
     const savedShadow = await store.get<boolean>("exclude_shadow");
     if (savedShadow != null) excludeShadow = savedShadow;
+    const savedBlur = await store.get<number>("blur_radius");
+    if (savedBlur != null) blurRadius = savedBlur;
+    const savedMosaic = await store.get<number>("mosaic_block_size");
+    if (savedMosaic != null) mosaicBlockSize = savedMosaic;
   });
 
   async function save() {
@@ -51,6 +57,20 @@
       saveMode = "custom";
       await save();
     }
+  }
+
+  async function onBlurRadiusChange(value: number) {
+    blurRadius = value;
+    if (!store) return;
+    await store.set("blur_radius", value);
+    await store.save();
+  }
+
+  async function onMosaicBlockSizeChange(value: number) {
+    mosaicBlockSize = value;
+    if (!store) return;
+    await store.set("mosaic_block_size", value);
+    await store.save();
   }
 
   async function onExcludeShadowChange(value: boolean) {
@@ -144,6 +164,38 @@
         </button>
       </div>
     {/if}
+  </section>
+
+  <section class="mt-8">
+    <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+      Mask
+    </h3>
+    <div class="flex items-center gap-3 px-3 py-2.5">
+      <label for="blurRadius" class="text-sm font-medium w-32">Blur intensity</label>
+      <input
+        id="blurRadius"
+        type="range"
+        min="1"
+        max="20"
+        value={blurRadius}
+        oninput={(e) => onBlurRadiusChange(Number((e.target as HTMLInputElement).value))}
+        class="flex-1 accent-blue-600"
+      />
+      <span class="text-sm text-gray-400 w-8 text-right">{blurRadius}</span>
+    </div>
+    <div class="flex items-center gap-3 px-3 py-2.5">
+      <label for="mosaicBlockSize" class="text-sm font-medium w-32">Mosaic size</label>
+      <input
+        id="mosaicBlockSize"
+        type="range"
+        min="3"
+        max="30"
+        value={mosaicBlockSize}
+        oninput={(e) => onMosaicBlockSizeChange(Number((e.target as HTMLInputElement).value))}
+        class="flex-1 accent-blue-600"
+      />
+      <span class="text-sm text-gray-400 w-8 text-right">{mosaicBlockSize}</span>
+    </div>
   </section>
 
   <section class="mt-8">
