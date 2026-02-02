@@ -672,43 +672,43 @@
     </button>
 
     {#if arrowToolActive}
-      <div class="w-px h-6 bg-[#3d3d3d]"></div>
+      <div class="tool-settings">
+        <input
+          type="color"
+          class="color-picker"
+          bind:value={arrowSettings.color}
+          data-tooltip="Arrow color"
+        />
 
-      <input
-        type="color"
-        class="color-picker"
-        bind:value={arrowSettings.color}
-        data-tooltip="Arrow color"
-      />
+        <select
+          class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
+          bind:value={arrowSettings.thickness}
+          data-tooltip="Arrow thickness"
+        >
+          <option value={2}>Thin</option>
+          <option value={4}>Medium</option>
+          <option value={6}>Thick</option>
+          <option value={8}>Extra thick</option>
+        </select>
 
-      <select
-        class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
-        bind:value={arrowSettings.thickness}
-        data-tooltip="Arrow thickness"
-      >
-        <option value={2}>Thin</option>
-        <option value={4}>Medium</option>
-        <option value={6}>Thick</option>
-        <option value={8}>Extra thick</option>
-      </select>
+        <button
+          class="tool-btn"
+          class:active={arrowSettings.whiteStroke}
+          onclick={() => (arrowSettings.whiteStroke = !arrowSettings.whiteStroke)}
+          data-tooltip="White border"
+        >
+          <i class="bi bi-border-width"></i>
+        </button>
 
-      <button
-        class="tool-btn"
-        class:active={arrowSettings.whiteStroke}
-        onclick={() => (arrowSettings.whiteStroke = !arrowSettings.whiteStroke)}
-        data-tooltip="White border"
-      >
-        <i class="bi bi-border-width"></i>
-      </button>
-
-      <button
-        class="tool-btn"
-        class:active={arrowSettings.dropShadow}
-        onclick={() => (arrowSettings.dropShadow = !arrowSettings.dropShadow)}
-        data-tooltip="Drop shadow"
-      >
-        <i class="bi bi-shadows"></i>
-      </button>
+        <button
+          class="tool-btn"
+          class:active={arrowSettings.dropShadow}
+          onclick={() => (arrowSettings.dropShadow = !arrowSettings.dropShadow)}
+          data-tooltip="Drop shadow"
+        >
+          <i class="bi bi-shadows"></i>
+        </button>
+      </div>
     {/if}
 
     <button
@@ -739,104 +739,104 @@
     </button>
 
     {#if shapeToolActive}
-      <div class="w-px h-6 bg-[#3d3d3d]"></div>
+      <div class="tool-settings">
+        <input
+          type="color"
+          class="color-picker"
+          bind:value={shapeSettings.color}
+          data-tooltip="Shape color"
+        />
 
-      <input
-        type="color"
-        class="color-picker"
-        bind:value={shapeSettings.color}
-        data-tooltip="Shape color"
-      />
+        <select
+          class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
+          bind:value={shapeSettings.thickness}
+          data-tooltip="Shape thickness"
+        >
+          <option value={2}>Thin</option>
+          <option value={4}>Medium</option>
+          <option value={6}>Thick</option>
+          <option value={8}>Extra thick</option>
+        </select>
 
-      <select
-        class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
-        bind:value={shapeSettings.thickness}
-        data-tooltip="Shape thickness"
-      >
-        <option value={2}>Thin</option>
-        <option value={4}>Medium</option>
-        <option value={6}>Thick</option>
-        <option value={8}>Extra thick</option>
-      </select>
+        <button
+          class="tool-btn"
+          class:active={shapeSettings.whiteStroke}
+          onclick={() => (shapeSettings.whiteStroke = !shapeSettings.whiteStroke)}
+          data-tooltip="White border"
+        >
+          <i class="bi bi-border-width"></i>
+        </button>
 
-      <button
-        class="tool-btn"
-        class:active={shapeSettings.whiteStroke}
-        onclick={() => (shapeSettings.whiteStroke = !shapeSettings.whiteStroke)}
-        data-tooltip="White border"
-      >
-        <i class="bi bi-border-width"></i>
-      </button>
-
-      <button
-        class="tool-btn"
-        class:active={shapeSettings.dropShadow}
-        onclick={() => (shapeSettings.dropShadow = !shapeSettings.dropShadow)}
-        data-tooltip="Drop shadow"
-      >
-        <i class="bi bi-shadows"></i>
-      </button>
+        <button
+          class="tool-btn"
+          class:active={shapeSettings.dropShadow}
+          onclick={() => (shapeSettings.dropShadow = !shapeSettings.dropShadow)}
+          data-tooltip="Drop shadow"
+        >
+          <i class="bi bi-shadows"></i>
+        </button>
+      </div>
     {/if}
 
     {#if textToolActive}
-      <div class="w-px h-6 bg-[#3d3d3d]"></div>
+      <div class="tool-settings">
+        <input
+          type="color"
+          class="color-picker"
+          value={textSettings.color}
+          oninput={(e) => updateTextSetting("color", (e.target as HTMLInputElement).value)}
+          data-tooltip="Text color"
+        />
 
-      <input
-        type="color"
-        class="color-picker"
-        value={textSettings.color}
-        oninput={(e) => updateTextSetting("color", (e.target as HTMLInputElement).value)}
-        data-tooltip="Text color"
-      />
+        <select
+          class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
+          value={textSettings.fontSize}
+          onchange={(e) => updateTextSetting("fontSize", Number((e.target as HTMLSelectElement).value))}
+          data-tooltip="Font size"
+        >
+          <option value={16}>16px</option>
+          <option value={20}>20px</option>
+          <option value={24}>24px</option>
+          <option value={32}>32px</option>
+          <option value={48}>48px</option>
+        </select>
 
-      <select
-        class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
-        value={textSettings.fontSize}
-        onchange={(e) => updateTextSetting("fontSize", Number((e.target as HTMLSelectElement).value))}
-        data-tooltip="Font size"
-      >
-        <option value={16}>16px</option>
-        <option value={20}>20px</option>
-        <option value={24}>24px</option>
-        <option value={32}>32px</option>
-        <option value={48}>48px</option>
-      </select>
+        <button
+          class="tool-btn"
+          class:active={textSettings.bold}
+          onclick={() => updateTextSetting("bold", !textSettings.bold)}
+          data-tooltip="Bold"
+        >
+          <i class="bi bi-type-bold"></i>
+        </button>
 
-      <button
-        class="tool-btn"
-        class:active={textSettings.bold}
-        onclick={() => updateTextSetting("bold", !textSettings.bold)}
-        data-tooltip="Bold"
-      >
-        <i class="bi bi-type-bold"></i>
-      </button>
+        <button
+          class="tool-btn"
+          class:active={textSettings.italic}
+          onclick={() => updateTextSetting("italic", !textSettings.italic)}
+          data-tooltip="Italic"
+        >
+          <i class="bi bi-type-italic"></i>
+        </button>
 
-      <button
-        class="tool-btn"
-        class:active={textSettings.italic}
-        onclick={() => updateTextSetting("italic", !textSettings.italic)}
-        data-tooltip="Italic"
-      >
-        <i class="bi bi-type-italic"></i>
-      </button>
+        <button
+          class="tool-btn"
+          class:active={textSettings.whiteStroke}
+          onclick={() => updateTextSetting("whiteStroke", !textSettings.whiteStroke)}
+          data-tooltip="White border"
+        >
+          <i class="bi bi-border-width"></i>
+        </button>
 
-      <button
-        class="tool-btn"
-        class:active={textSettings.whiteStroke}
-        onclick={() => updateTextSetting("whiteStroke", !textSettings.whiteStroke)}
-        data-tooltip="White border"
-      >
-        <i class="bi bi-border-width"></i>
-      </button>
-
-      <button
-        class="tool-btn"
-        class:active={textSettings.dropShadow}
-        onclick={() => updateTextSetting("dropShadow", !textSettings.dropShadow)}
-        data-tooltip="Drop shadow"
-      >
-        <i class="bi bi-shadows"></i>
-      </button>
+        <button
+          class="tool-btn"
+          class:active={textSettings.dropShadow}
+          onclick={() => updateTextSetting("dropShadow", !textSettings.dropShadow)}
+          data-tooltip="Drop shadow"
+        >
+          <i class="bi bi-shadows"></i>
+        </button>
+      </div>
     {/if}
 
     <button
@@ -849,39 +849,39 @@
     </button>
 
     {#if maskToolActive}
-      <div class="w-px h-6 bg-[#3d3d3d]"></div>
+      <div class="tool-settings">
+        <button
+          class="tool-btn text-xs"
+          class:active={maskSettings.mode === "mosaic"}
+          onclick={() => (maskSettings.mode = "mosaic")}
+          data-tooltip="Mosaic"
+        >▦</button>
+        <button
+          class="tool-btn text-xs"
+          class:active={maskSettings.mode === "blur"}
+          onclick={() => (maskSettings.mode = "blur")}
+          data-tooltip="Blur"
+        >
+          <i class="bi bi-droplet-half"></i>
+        </button>
+        <button
+          class="tool-btn text-xs"
+          class:active={maskSettings.mode === "fill"}
+          onclick={() => (maskSettings.mode = "fill")}
+          data-tooltip="Fill"
+        >
+          <i class="bi bi-paint-bucket"></i>
+        </button>
 
-      <button
-        class="tool-btn text-xs"
-        class:active={maskSettings.mode === "mosaic"}
-        onclick={() => (maskSettings.mode = "mosaic")}
-        data-tooltip="Mosaic"
-      >▦</button>
-      <button
-        class="tool-btn text-xs"
-        class:active={maskSettings.mode === "blur"}
-        onclick={() => (maskSettings.mode = "blur")}
-        data-tooltip="Blur"
-      >
-        <i class="bi bi-droplet-half"></i>
-      </button>
-      <button
-        class="tool-btn text-xs"
-        class:active={maskSettings.mode === "fill"}
-        onclick={() => (maskSettings.mode = "fill")}
-        data-tooltip="Fill"
-      >
-        <i class="bi bi-paint-bucket"></i>
-      </button>
-
-      {#if maskSettings.mode === "fill"}
-        <input
-          type="color"
-          class="color-picker"
-          bind:value={maskSettings.color}
-          data-tooltip="Fill color"
-        />
-      {/if}
+        {#if maskSettings.mode === "fill"}
+          <input
+            type="color"
+            class="color-picker"
+            bind:value={maskSettings.color}
+            data-tooltip="Fill color"
+          />
+        {/if}
+      </div>
     {/if}
 
     <div class="w-px h-6 bg-[#3d3d3d]"></div>
@@ -1022,6 +1022,16 @@
 </div>
 
 <style>
+  .tool-settings {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #363636;
+    margin: -0.5rem 0;
+    padding: 0.5rem 0.5rem;
+    border-left: 1px solid #4a4a4a;
+  }
+
   :global(body) {
     margin: 0;
     padding: 0;
