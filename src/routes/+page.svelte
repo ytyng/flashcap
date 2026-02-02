@@ -9,10 +9,14 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ArrowOverlay from "$lib/ArrowOverlay.svelte";
   import MaskOverlay from "$lib/MaskOverlay.svelte";
+  import ShapeOverlay from "$lib/ShapeOverlay.svelte";
+  import TextOverlay from "$lib/TextOverlay.svelte";
 
   let arrowOverlayRef = $state<ReturnType<typeof ArrowOverlay> | null>(null);
   let maskOverlayRef = $state<ReturnType<typeof MaskOverlay> | null>(null);
-  import type { Arrow, ArrowSettings, MaskRect, MaskSettings } from "$lib/types";
+  let shapeOverlayRef = $state<ReturnType<typeof ShapeOverlay> | null>(null);
+  let textOverlayRef = $state<ReturnType<typeof TextOverlay> | null>(null);
+  import type { Arrow, ArrowSettings, MaskRect, MaskSettings, Shape, ShapeSettings, TextAnnotation, TextSettings } from "$lib/types";
 
   interface ScreenshotResult {
     width: number;
@@ -51,13 +55,40 @@
     mosaicBlockSize: 7,
   });
 
+  // Shape tool state (rect / ellipse)
+  let shapeToolActive = $state(false);
+  let shapes = $state<Shape[]>([]);
+  const SHAPE_SETTINGS_KEY = "flashcap-shape-settings";
+  let shapeSettings = $state<ShapeSettings>({
+    type: "rect",
+    color: "#FF0000",
+    thickness: 4,
+    whiteStroke: true,
+    dropShadow: true,
+  });
+
+  // Text tool state
+  let textToolActive = $state(false);
+  let textAnnotations = $state<TextAnnotation[]>([]);
+  const TEXT_SETTINGS_KEY = "flashcap-text-settings";
+  let textSettings = $state<TextSettings>({
+    fontSize: 24,
+    color: "#FF0000",
+    bold: true,
+    italic: false,
+    whiteStroke: true,
+    dropShadow: true,
+  });
+
   // Undo history
-  let undoHistory = $state<{ arrows: Arrow[]; masks: MaskRect[] }[]>([]);
+  let undoHistory = $state<{ arrows: Arrow[]; masks: MaskRect[]; shapes: Shape[]; texts: TextAnnotation[] }[]>([]);
 
   function pushUndo() {
     undoHistory.push({
       arrows: structuredClone($state.snapshot(arrows)),
       masks: structuredClone($state.snapshot(masks)),
+      shapes: structuredClone($state.snapshot(shapes)),
+      texts: structuredClone($state.snapshot(textAnnotations)),
     });
   }
 
@@ -66,6 +97,8 @@
     if (!entry) return;
     arrows = entry.arrows;
     masks = entry.masks;
+    shapes = entry.shapes;
+    textAnnotations = entry.texts;
   }
 
   // Image element reference for composite rendering
@@ -77,6 +110,8 @@
   let viewportEl = $state<HTMLDivElement | null>(null);
   let viewportWidth = $state(0);
   let viewportHeight = $state(0);
+
+  let noToolActive = $derived(!arrowToolActive && !maskToolActive && !shapeToolActive && !textToolActive);
 
   // CSS scale to fit the natural-size wrapper into the viewport
   let displayScale = $derived(
@@ -140,6 +175,31 @@
       } catch { /* ignore invalid JSON */ }
     }
 
+    const savedShape = localStorage.getItem(SHAPE_SETTINGS_KEY);
+    if (savedShape) {
+      try {
+        const parsed = JSON.parse(savedShape);
+        shapeSettings.type = parsed.type ?? shapeSettings.type;
+        shapeSettings.color = parsed.color ?? shapeSettings.color;
+        shapeSettings.thickness = parsed.thickness ?? shapeSettings.thickness;
+        shapeSettings.whiteStroke = parsed.whiteStroke ?? shapeSettings.whiteStroke;
+        shapeSettings.dropShadow = parsed.dropShadow ?? shapeSettings.dropShadow;
+      } catch { /* ignore invalid JSON */ }
+    }
+
+    const savedText = localStorage.getItem(TEXT_SETTINGS_KEY);
+    if (savedText) {
+      try {
+        const parsed = JSON.parse(savedText);
+        textSettings.fontSize = parsed.fontSize ?? textSettings.fontSize;
+        textSettings.color = parsed.color ?? textSettings.color;
+        textSettings.bold = parsed.bold ?? textSettings.bold;
+        textSettings.italic = parsed.italic ?? textSettings.italic;
+        textSettings.whiteStroke = parsed.whiteStroke ?? textSettings.whiteStroke;
+        textSettings.dropShadow = parsed.dropShadow ?? textSettings.dropShadow;
+      } catch { /* ignore invalid JSON */ }
+    }
+
     captureScreen();
     updateViewportSize();
 
@@ -188,6 +248,16 @@
     localStorage.setItem(MASK_SETTINGS_KEY, JSON.stringify({ mode, color }));
   });
 
+  $effect(() => {
+    const { type, color, thickness, whiteStroke, dropShadow } = shapeSettings;
+    localStorage.setItem(SHAPE_SETTINGS_KEY, JSON.stringify({ type, color, thickness, whiteStroke, dropShadow }));
+  });
+
+  $effect(() => {
+    const { fontSize, color, bold, italic, whiteStroke, dropShadow } = textSettings;
+    localStorage.setItem(TEXT_SETTINGS_KEY, JSON.stringify({ fontSize, color, bold, italic, whiteStroke, dropShadow }));
+  });
+
   async function captureScreen(command: string = "take_screenshot_interactive") {
     isCapturing = true;
     // キャプチャ完了までウィンドウを非表示にする
@@ -200,6 +270,8 @@
       filePath = result.file_path;
       arrows = [];
       masks = [];
+      shapes = [];
+      textAnnotations = [];
       undoHistory = [];
       naturalWidth = 0;
       naturalHeight = 0;
@@ -411,6 +483,80 @@
           }
         }
 
+        // Shapes (rect / ellipse)
+        for (const shape of shapes) {
+          ctx.save();
+          if (shape.dropShadow) {
+            ctx.shadowColor = "rgba(0,0,0,0.5)";
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+          }
+
+          if (shape.type === "rect") {
+            if (shape.whiteStroke) {
+              ctx.strokeStyle = "white";
+              ctx.lineWidth = shape.thickness + 4;
+              ctx.lineJoin = "round";
+              ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+            }
+            ctx.strokeStyle = shape.color;
+            ctx.lineWidth = shape.thickness;
+            ctx.lineJoin = "round";
+            ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+          } else {
+            const cx = shape.x + shape.width / 2;
+            const cy = shape.y + shape.height / 2;
+            const rx = shape.width / 2;
+            const ry = shape.height / 2;
+            if (shape.whiteStroke) {
+              ctx.strokeStyle = "white";
+              ctx.lineWidth = shape.thickness + 4;
+              ctx.beginPath();
+              ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            ctx.strokeStyle = shape.color;
+            ctx.lineWidth = shape.thickness;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // Text annotations
+        for (const t of textAnnotations) {
+          if (!t.text) continue;
+          ctx.save();
+          if (t.dropShadow) {
+            ctx.shadowColor = "rgba(0,0,0,0.6)";
+            ctx.shadowBlur = 3;
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 1;
+          }
+          const fontStyle = t.italic ? "italic" : "";
+          const fontWeight = t.bold ? "900" : "normal";
+          ctx.font = `${fontStyle} ${fontWeight} ${t.fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`.trim();
+          ctx.textBaseline = "top";
+          const lineHeight = t.fontSize * 1.3;
+          const lines = t.text.split("\n");
+          for (let i = 0; i < lines.length; i++) {
+            const ly = t.y + i * lineHeight;
+            if (t.whiteStroke) {
+              ctx.strokeStyle = "white";
+              ctx.lineWidth = 3;
+              ctx.lineJoin = "round";
+              ctx.strokeText(lines[i], t.x + 4, ly);
+              // stroke 後に shadow を無効化し、fill には shadow をかけない
+              ctx.shadowColor = "transparent";
+            }
+            ctx.fillStyle = t.color;
+            ctx.fillText(lines[i], t.x + 4, ly);
+          }
+          ctx.restore();
+        }
+
         canvas.toBlob((blob) => {
           blob!.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)));
         }, "image/png");
@@ -440,7 +586,7 @@
   // メモリ上の元画像 (imageBase64) はそのまま保持する
   // compositeBytes が渡された場合は再レンダリングをスキップする
   async function saveCompositeToFile(compositeBytes?: Uint8Array) {
-    if (!filePath || !imageBase64 || (arrows.length === 0 && masks.length === 0)) return;
+    if (!filePath || !imageBase64 || (arrows.length === 0 && masks.length === 0 && shapes.length === 0 && textAnnotations.length === 0)) return;
     const bytes = compositeBytes ?? await renderComposite();
     await invoke("write_image_to_file", {
       path: filePath,
@@ -451,7 +597,8 @@
   async function copyImage() {
     if (!imageBase64) return;
 
-    const bytes = (arrows.length > 0 || masks.length > 0)
+    const hasAnnotations = arrows.length > 0 || masks.length > 0 || shapes.length > 0 || textAnnotations.length > 0;
+    const bytes = hasAnnotations
       ? await renderComposite()
       : base64ToUint8(imageBase64);
 
@@ -468,24 +615,42 @@
     }
   }
 
+  function deactivateAllTools() {
+    arrowToolActive = false;
+    maskToolActive = false;
+    shapeToolActive = false;
+    textToolActive = false;
+    arrowOverlayRef?.deselect();
+    maskOverlayRef?.deselect();
+    shapeOverlayRef?.deselect();
+    textOverlayRef?.deselect();
+  }
+
   function toggleArrowTool() {
-    arrowToolActive = !arrowToolActive;
-    if (arrowToolActive) {
-      maskToolActive = false;
-      maskOverlayRef?.deselect();
-    } else {
-      arrowOverlayRef?.deselect();
-    }
+    const wasActive = arrowToolActive;
+    deactivateAllTools();
+    arrowToolActive = !wasActive;
   }
 
   function toggleMaskTool() {
-    maskToolActive = !maskToolActive;
-    if (maskToolActive) {
-      arrowToolActive = false;
-      arrowOverlayRef?.deselect();
-    } else {
-      maskOverlayRef?.deselect();
+    const wasActive = maskToolActive;
+    deactivateAllTools();
+    maskToolActive = !wasActive;
+  }
+
+  function toggleShapeTool(type: "rect" | "ellipse") {
+    const wasActive = shapeToolActive && shapeSettings.type === type;
+    deactivateAllTools();
+    if (!wasActive) {
+      shapeToolActive = true;
+      shapeSettings.type = type;
     }
+  }
+
+  function toggleTextTool() {
+    const wasActive = textToolActive;
+    deactivateAllTools();
+    textToolActive = !wasActive;
   }
 </script>
 
@@ -534,6 +699,132 @@
         class="tool-btn"
         class:active={arrowSettings.dropShadow}
         onclick={() => (arrowSettings.dropShadow = !arrowSettings.dropShadow)}
+        data-tooltip="Drop shadow"
+      >
+        <i class="bi bi-shadows"></i>
+      </button>
+    {/if}
+
+    <button
+      class="tool-btn"
+      class:active={shapeToolActive && shapeSettings.type === "rect"}
+      onclick={() => toggleShapeTool("rect")}
+      data-tooltip="Rectangle tool"
+    >
+      <i class="bi bi-bounding-box"></i>
+    </button>
+
+    <button
+      class="tool-btn"
+      class:active={shapeToolActive && shapeSettings.type === "ellipse"}
+      onclick={() => toggleShapeTool("ellipse")}
+      data-tooltip="Ellipse tool"
+    >
+      <i class="bi bi-circle"></i>
+    </button>
+
+    <button
+      class="tool-btn"
+      class:active={textToolActive}
+      onclick={toggleTextTool}
+      data-tooltip="Text tool"
+    >
+      <i class="bi bi-fonts"></i>
+    </button>
+
+    {#if shapeToolActive}
+      <div class="w-px h-6 bg-[#3d3d3d]"></div>
+
+      <input
+        type="color"
+        class="color-picker"
+        bind:value={shapeSettings.color}
+        data-tooltip="Shape color"
+      />
+
+      <select
+        class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
+        bind:value={shapeSettings.thickness}
+        data-tooltip="Shape thickness"
+      >
+        <option value={2}>Thin</option>
+        <option value={4}>Medium</option>
+        <option value={6}>Thick</option>
+        <option value={8}>Extra thick</option>
+      </select>
+
+      <button
+        class="tool-btn"
+        class:active={shapeSettings.whiteStroke}
+        onclick={() => (shapeSettings.whiteStroke = !shapeSettings.whiteStroke)}
+        data-tooltip="White border"
+      >
+        <i class="bi bi-border-width"></i>
+      </button>
+
+      <button
+        class="tool-btn"
+        class:active={shapeSettings.dropShadow}
+        onclick={() => (shapeSettings.dropShadow = !shapeSettings.dropShadow)}
+        data-tooltip="Drop shadow"
+      >
+        <i class="bi bi-shadows"></i>
+      </button>
+    {/if}
+
+    {#if textToolActive}
+      <div class="w-px h-6 bg-[#3d3d3d]"></div>
+
+      <input
+        type="color"
+        class="color-picker"
+        bind:value={textSettings.color}
+        data-tooltip="Text color"
+      />
+
+      <select
+        class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
+        bind:value={textSettings.fontSize}
+        data-tooltip="Font size"
+      >
+        <option value={16}>16px</option>
+        <option value={20}>20px</option>
+        <option value={24}>24px</option>
+        <option value={32}>32px</option>
+        <option value={48}>48px</option>
+      </select>
+
+      <button
+        class="tool-btn"
+        class:active={textSettings.bold}
+        onclick={() => (textSettings.bold = !textSettings.bold)}
+        data-tooltip="Bold"
+      >
+        <i class="bi bi-type-bold"></i>
+      </button>
+
+      <button
+        class="tool-btn"
+        class:active={textSettings.italic}
+        onclick={() => (textSettings.italic = !textSettings.italic)}
+        data-tooltip="Italic"
+      >
+        <i class="bi bi-type-italic"></i>
+      </button>
+
+      <button
+        class="tool-btn"
+        class:active={textSettings.whiteStroke}
+        onclick={() => (textSettings.whiteStroke = !textSettings.whiteStroke)}
+        data-tooltip="White border"
+      >
+        <i class="bi bi-border-width"></i>
+      </button>
+
+      <button
+        class="tool-btn"
+        class:active={textSettings.dropShadow}
+        onclick={() => (textSettings.dropShadow = !textSettings.dropShadow)}
         data-tooltip="Drop shadow"
       >
         <i class="bi bi-shadows"></i>
@@ -678,17 +969,37 @@
           {masks}
           settings={maskSettings}
           toolActive={maskToolActive}
-          interactive={!arrowToolActive}
+          interactive={maskToolActive || (noToolActive && masks.length > 0)}
           scale={displayScale}
           onBeforeMutate={pushUndo}
           onMasksChange={(newMasks) => (masks = newMasks)}
+        />
+        <ShapeOverlay
+          bind:this={shapeOverlayRef}
+          {shapes}
+          settings={shapeSettings}
+          toolActive={shapeToolActive}
+          interactive={shapeToolActive || (noToolActive && shapes.length > 0)}
+          scale={displayScale}
+          onBeforeMutate={pushUndo}
+          onShapesChange={(newShapes) => (shapes = newShapes)}
+        />
+        <TextOverlay
+          bind:this={textOverlayRef}
+          texts={textAnnotations}
+          settings={textSettings}
+          toolActive={textToolActive}
+          interactive={textToolActive || (noToolActive && textAnnotations.length > 0)}
+          scale={displayScale}
+          onBeforeMutate={pushUndo}
+          onTextsChange={(newTexts) => (textAnnotations = newTexts)}
         />
         <ArrowOverlay
           bind:this={arrowOverlayRef}
           {arrows}
           settings={arrowSettings}
           toolActive={arrowToolActive}
-          interactive={!maskToolActive}
+          interactive={arrowToolActive || noToolActive}
           scale={displayScale}
           onBeforeMutate={pushUndo}
           onArrowsChange={(newArrows) => (arrows = newArrows)}
