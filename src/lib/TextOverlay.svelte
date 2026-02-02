@@ -183,13 +183,13 @@
       commitEditing();
       return;
     }
-    // IME確定後のEnterによるcommitを防ぐ (Shift+Enterで改行)
-    // 通常のEnterで確定
-    if (e.key === "Enter" && !e.shiftKey && !(e as any).isComposing) {
+    // Cmd+Enter で確定
+    if (e.key === "Enter" && e.metaKey && !(e as any).isComposing) {
       e.preventDefault();
       commitEditing();
       return;
     }
+    // 通常の Enter はそのまま改行（textarea のデフォルト動作）
     // Backspace/Delete がグローバルに伝播しないようにする
     e.stopPropagation();
   }
@@ -207,6 +207,22 @@
 
   // 表示用: テキスト一覧 (pending を含む)
   let allTexts = $derived(pendingText ? [...texts, pendingText] : texts);
+
+  function focusOnMount(node: HTMLElement) {
+    setTimeout(() => node.focus(), 100);
+  }
+
+  // 編集中/選択中のテキストの属性を更新する
+  export function updateActiveAttribute(key: string, value: unknown) {
+    const targetId = editingId ?? selectedId;
+    if (!targetId) return;
+
+    if (pendingText && pendingText.id === targetId) {
+      pendingText = { ...pendingText, [key]: value };
+    } else {
+      onTextsChange(texts.map((t) => (t.id === targetId ? { ...t, [key]: value } : t)));
+    }
+  }
 
   export function deselect() {
     commitEditing();
@@ -247,7 +263,6 @@
         width={Math.max(200, bbox.width + 40)}
         height={Math.max(lineHeight + 16, bbox.height + 16)}
       >
-        <!-- svelte-ignore a11y_autofocus -->
         <textarea
           xmlns="http://www.w3.org/1999/xhtml"
           class="text-edit-input"
@@ -255,7 +270,7 @@
           value={pendingText && pendingText.id === t.id ? pendingText.text : t.text}
           oninput={(e) => handleEditInput(e, t.id)}
           onkeydown={handleEditKeyDown}
-          autofocus
+          use:focusOnMount
         ></textarea>
       </foreignObject>
     {:else}

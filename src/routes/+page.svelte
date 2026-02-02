@@ -258,6 +258,12 @@
     localStorage.setItem(TEXT_SETTINGS_KEY, JSON.stringify({ fontSize, color, bold, italic, whiteStroke, dropShadow }));
   });
 
+  // テキスト属性変更時、編集中/選択中のテキストにも反映する
+  function updateTextSetting<K extends keyof TextSettings>(key: K, value: TextSettings[K]) {
+    textSettings[key] = value;
+    textOverlayRef?.updateActiveAttribute(key, value);
+  }
+
   async function captureScreen(command: string = "take_screenshot_interactive") {
     isCapturing = true;
     // キャプチャ完了までウィンドウを非表示にする
@@ -778,13 +784,15 @@
       <input
         type="color"
         class="color-picker"
-        bind:value={textSettings.color}
+        value={textSettings.color}
+        oninput={(e) => updateTextSetting("color", (e.target as HTMLInputElement).value)}
         data-tooltip="Text color"
       />
 
       <select
         class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
-        bind:value={textSettings.fontSize}
+        value={textSettings.fontSize}
+        onchange={(e) => updateTextSetting("fontSize", Number((e.target as HTMLSelectElement).value))}
         data-tooltip="Font size"
       >
         <option value={16}>16px</option>
@@ -797,7 +805,7 @@
       <button
         class="tool-btn"
         class:active={textSettings.bold}
-        onclick={() => (textSettings.bold = !textSettings.bold)}
+        onclick={() => updateTextSetting("bold", !textSettings.bold)}
         data-tooltip="Bold"
       >
         <i class="bi bi-type-bold"></i>
@@ -806,7 +814,7 @@
       <button
         class="tool-btn"
         class:active={textSettings.italic}
-        onclick={() => (textSettings.italic = !textSettings.italic)}
+        onclick={() => updateTextSetting("italic", !textSettings.italic)}
         data-tooltip="Italic"
       >
         <i class="bi bi-type-italic"></i>
@@ -815,7 +823,7 @@
       <button
         class="tool-btn"
         class:active={textSettings.whiteStroke}
-        onclick={() => (textSettings.whiteStroke = !textSettings.whiteStroke)}
+        onclick={() => updateTextSetting("whiteStroke", !textSettings.whiteStroke)}
         data-tooltip="White border"
       >
         <i class="bi bi-border-width"></i>
@@ -824,7 +832,7 @@
       <button
         class="tool-btn"
         class:active={textSettings.dropShadow}
-        onclick={() => (textSettings.dropShadow = !textSettings.dropShadow)}
+        onclick={() => updateTextSetting("dropShadow", !textSettings.dropShadow)}
         data-tooltip="Drop shadow"
       >
         <i class="bi bi-shadows"></i>
