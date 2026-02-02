@@ -89,31 +89,22 @@ fn load_screenshot_result(file_path: String) -> Result<ScreenshotResult, String>
 }
 
 #[tauri::command]
-fn take_screenshot_interactive(
+async fn take_screenshot_interactive(
     app: tauri::AppHandle,
-    window: tauri::Window,
 ) -> Result<ScreenshotResult, String> {
     let file_path = get_screenshot_path(&app);
 
-    // スクリーンショットに自身のウィンドウが映らないように隠す
-    let _ = window.hide();
-    std::thread::sleep(std::time::Duration::from_millis(300));
-
-    let mut args = vec!["-i"];
+    let mut args = vec!["-i".to_string()];
     if get_exclude_shadow(&app) {
-        args.push("-o");
+        args.push("-o".to_string());
     }
-    args.push(&file_path);
+    args.push(file_path.clone());
 
-    let status = Command::new("screencapture")
+    let status = tokio::process::Command::new("screencapture")
         .args(&args)
         .status()
-        .map_err(|e| {
-            let _ = window.show();
-            format!("Failed to run screencapture: {}", e)
-        })?;
-
-    let _ = window.show();
+        .await
+        .map_err(|e| format!("Failed to run screencapture: {}", e))?;
 
     if !status.success() {
         return Err("Screenshot was cancelled".to_string());
@@ -146,14 +137,9 @@ fn get_timer_delay(app: &tauri::AppHandle) -> u32 {
 #[tauri::command]
 async fn take_screenshot_timer(
     app: tauri::AppHandle,
-    window: tauri::Window,
 ) -> Result<ScreenshotResult, String> {
     let file_path = get_screenshot_path(&app);
     let delay = get_timer_delay(&app).to_string();
-
-    // スクリーンショットに自身のウィンドウが映らないように隠す
-    let _ = window.hide();
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     let mut args = vec!["-i".to_string()];
     if get_exclude_shadow(&app) {
@@ -165,12 +151,7 @@ async fn take_screenshot_timer(
         .args(&args)
         .status()
         .await
-        .map_err(|e| {
-            let _ = window.show();
-            format!("Failed to run screencapture: {}", e)
-        })?;
-
-    let _ = window.show();
+        .map_err(|e| format!("Failed to run screencapture: {}", e))?;
 
     if !status.success() {
         return Err("Screenshot was cancelled".to_string());

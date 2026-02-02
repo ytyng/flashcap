@@ -6,6 +6,7 @@
   import { writeText, writeImage } from "@tauri-apps/plugin-clipboard-manager";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { startDrag } from "@crabnebula/tauri-plugin-drag";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import ArrowOverlay from "$lib/ArrowOverlay.svelte";
   import MaskOverlay from "$lib/MaskOverlay.svelte";
 
@@ -153,9 +154,7 @@
     function handleKeydown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
-          getCurrentWindow().close()
-        );
+        getCurrentWindow().close();
       } else if (e.metaKey && e.shiftKey && e.key === "c") {
         e.preventDefault();
         copyImage();
@@ -191,6 +190,9 @@
 
   async function captureScreen(command: string = "take_screenshot_interactive") {
     isCapturing = true;
+    // キャプチャ完了までウィンドウを非表示にする
+    const appWindow = getCurrentWindow();
+    await appWindow.hide();
     try {
       const result = await invoke<ScreenshotResult>(command);
       imageBase64 = result.data;
@@ -208,6 +210,8 @@
       }
     } finally {
       isCapturing = false;
+      // キャプチャ完了・キャンセル後にウィンドウを再表示する
+      await appWindow.show();
     }
   }
 
