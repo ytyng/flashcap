@@ -810,7 +810,7 @@
           aria-label="White border"
           data-tooltip="White border"
         >
-          <i class="bi bi-border-width"></i>
+          <i class="bi bi-back"></i>
         </button>
 
         <button
@@ -834,6 +834,7 @@
           data-tooltip="Shape color"
         />
 
+        <i class="bi bi-border-width text-[#999] text-xs"></i>
         <select
           class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
           bind:value={shapeSettings.thickness}
@@ -852,7 +853,7 @@
           aria-label="White border"
           data-tooltip="White border"
         >
-          <i class="bi bi-border-width"></i>
+          <i class="bi bi-back"></i>
         </button>
 
         <button
@@ -874,7 +875,7 @@
       aria-label="Rectangle tool"
       data-tooltip="Rectangle tool"
     >
-      <i class="bi bi-bounding-box"></i>
+      <i class="bi bi-square"></i>
     </button>
 
     {#if shapeToolActive && shapeSettings.type === "rect"}
@@ -902,7 +903,7 @@
       aria-label="Text tool"
       data-tooltip="Text tool"
     >
-      <i class="bi bi-fonts"></i>
+      <i class="bi bi-fonts" style="font-size: 125%"></i>
     </button>
 
     {#if textToolActive}
@@ -955,7 +956,7 @@
           aria-label="White border"
           data-tooltip="White border"
         >
-          <i class="bi bi-border-width"></i>
+          <i class="bi bi-back"></i>
         </button>
 
         <button
@@ -977,7 +978,7 @@
       aria-label="Mask tool"
       data-tooltip="Mask tool"
     >
-      <i class="bi bi-square"></i>
+      <i class="bi bi-grid-3x3"></i>
     </button>
 
     {#if maskToolActive}
@@ -1037,7 +1038,7 @@
       </button>
       <input
         type="text"
-        class="w-[200px] text-[13px] text-[#aaa] bg-transparent border-none outline-none"
+        class="flex-1 min-w-0 text-[13px] text-[#aaa] bg-transparent border-none outline-none"
         value={filePath}
         readonly
         title={filePath}
@@ -1074,7 +1075,7 @@
       </button>
     {/if}
 
-    <div class="flex-1"></div>
+    <div class="w-px h-6 bg-[#3d3d3d]"></div>
 
     <button
       class="tool-btn"
