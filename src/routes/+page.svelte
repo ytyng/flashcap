@@ -825,37 +825,7 @@
       </div>
     {/if}
 
-    <button
-      class="tool-btn"
-      class:active={shapeToolActive && shapeSettings.type === "rect"}
-      onclick={() => toggleShapeTool("rect")}
-      aria-label="Rectangle tool"
-      data-tooltip="Rectangle tool"
-    >
-      <i class="bi bi-bounding-box"></i>
-    </button>
-
-    <button
-      class="tool-btn"
-      class:active={shapeToolActive && shapeSettings.type === "ellipse"}
-      onclick={() => toggleShapeTool("ellipse")}
-      aria-label="Ellipse tool"
-      data-tooltip="Ellipse tool"
-    >
-      <i class="bi bi-circle"></i>
-    </button>
-
-    <button
-      class="tool-btn"
-      class:active={textToolActive}
-      onclick={toggleTextTool}
-      aria-label="Text tool"
-      data-tooltip="Text tool"
-    >
-      <i class="bi bi-fonts"></i>
-    </button>
-
-    {#if shapeToolActive}
+    {#snippet shapeSettingsPanel()}
       <div class="tool-settings">
         <input
           type="color"
@@ -895,7 +865,45 @@
           <i class="bi bi-shadows"></i>
         </button>
       </div>
+    {/snippet}
+
+    <button
+      class="tool-btn"
+      class:active={shapeToolActive && shapeSettings.type === "rect"}
+      onclick={() => toggleShapeTool("rect")}
+      aria-label="Rectangle tool"
+      data-tooltip="Rectangle tool"
+    >
+      <i class="bi bi-bounding-box"></i>
+    </button>
+
+    {#if shapeToolActive && shapeSettings.type === "rect"}
+      {@render shapeSettingsPanel()}
     {/if}
+
+    <button
+      class="tool-btn"
+      class:active={shapeToolActive && shapeSettings.type === "ellipse"}
+      onclick={() => toggleShapeTool("ellipse")}
+      aria-label="Ellipse tool"
+      data-tooltip="Ellipse tool"
+    >
+      <i class="bi bi-circle"></i>
+    </button>
+
+    {#if shapeToolActive && shapeSettings.type === "ellipse"}
+      {@render shapeSettingsPanel()}
+    {/if}
+
+    <button
+      class="tool-btn"
+      class:active={textToolActive}
+      onclick={toggleTextTool}
+      aria-label="Text tool"
+      data-tooltip="Text tool"
+    >
+      <i class="bi bi-fonts"></i>
+    </button>
 
     {#if textToolActive}
       <div class="tool-settings">
@@ -1196,6 +1204,10 @@
   .tool-btn.active {
     background: #0066cc;
     color: #fff;
+  }
+
+  .tool-btn.active:hover:not(:disabled) {
+    background: #1a7adf;
   }
 
   /* Instant tooltip via data-tooltip attribute + ::after */
