@@ -736,6 +736,7 @@
       class="tool-btn"
       class:active={arrowToolActive}
       onclick={toggleArrowTool}
+      aria-label="Arrow tool"
       data-tooltip="Arrow tool"
     >
       <i class="bi bi-arrow-up-right"></i>
@@ -765,6 +766,7 @@
           class="tool-btn"
           class:active={arrowSettings.whiteStroke}
           onclick={() => (arrowSettings.whiteStroke = !arrowSettings.whiteStroke)}
+          aria-label="White border"
           data-tooltip="White border"
         >
           <i class="bi bi-border-width"></i>
@@ -774,6 +776,7 @@
           class="tool-btn"
           class:active={arrowSettings.dropShadow}
           onclick={() => (arrowSettings.dropShadow = !arrowSettings.dropShadow)}
+          aria-label="Drop shadow"
           data-tooltip="Drop shadow"
         >
           <i class="bi bi-shadows"></i>
@@ -785,6 +788,7 @@
       class="tool-btn"
       class:active={shapeToolActive && shapeSettings.type === "rect"}
       onclick={() => toggleShapeTool("rect")}
+      aria-label="Rectangle tool"
       data-tooltip="Rectangle tool"
     >
       <i class="bi bi-bounding-box"></i>
@@ -794,6 +798,7 @@
       class="tool-btn"
       class:active={shapeToolActive && shapeSettings.type === "ellipse"}
       onclick={() => toggleShapeTool("ellipse")}
+      aria-label="Ellipse tool"
       data-tooltip="Ellipse tool"
     >
       <i class="bi bi-circle"></i>
@@ -803,6 +808,7 @@
       class="tool-btn"
       class:active={textToolActive}
       onclick={toggleTextTool}
+      aria-label="Text tool"
       data-tooltip="Text tool"
     >
       <i class="bi bi-fonts"></i>
@@ -832,6 +838,7 @@
           class="tool-btn"
           class:active={shapeSettings.whiteStroke}
           onclick={() => (shapeSettings.whiteStroke = !shapeSettings.whiteStroke)}
+          aria-label="White border"
           data-tooltip="White border"
         >
           <i class="bi bi-border-width"></i>
@@ -841,6 +848,7 @@
           class="tool-btn"
           class:active={shapeSettings.dropShadow}
           onclick={() => (shapeSettings.dropShadow = !shapeSettings.dropShadow)}
+          aria-label="Drop shadow"
           data-tooltip="Drop shadow"
         >
           <i class="bi bi-shadows"></i>
@@ -875,6 +883,7 @@
           class="tool-btn"
           class:active={textSettings.bold}
           onclick={() => updateTextSetting("bold", !textSettings.bold)}
+          aria-label="Bold"
           data-tooltip="Bold"
         >
           <i class="bi bi-type-bold"></i>
@@ -884,6 +893,7 @@
           class="tool-btn"
           class:active={textSettings.italic}
           onclick={() => updateTextSetting("italic", !textSettings.italic)}
+          aria-label="Italic"
           data-tooltip="Italic"
         >
           <i class="bi bi-type-italic"></i>
@@ -893,6 +903,7 @@
           class="tool-btn"
           class:active={textSettings.whiteStroke}
           onclick={() => updateTextSetting("whiteStroke", !textSettings.whiteStroke)}
+          aria-label="White border"
           data-tooltip="White border"
         >
           <i class="bi bi-border-width"></i>
@@ -902,6 +913,7 @@
           class="tool-btn"
           class:active={textSettings.dropShadow}
           onclick={() => updateTextSetting("dropShadow", !textSettings.dropShadow)}
+          aria-label="Drop shadow"
           data-tooltip="Drop shadow"
         >
           <i class="bi bi-shadows"></i>
@@ -913,6 +925,7 @@
       class="tool-btn"
       class:active={maskToolActive}
       onclick={toggleMaskTool}
+      aria-label="Mask tool"
       data-tooltip="Mask tool"
     >
       <i class="bi bi-square"></i>
@@ -930,6 +943,7 @@
           class="tool-btn text-xs"
           class:active={maskSettings.mode === "blur"}
           onclick={() => (maskSettings.mode = "blur")}
+          aria-label="Blur"
           data-tooltip="Blur"
         >
           <i class="bi bi-droplet-half"></i>
@@ -938,6 +952,7 @@
           class="tool-btn text-xs"
           class:active={maskSettings.mode === "fill"}
           onclick={() => (maskSettings.mode = "fill")}
+          aria-label="Fill"
           data-tooltip="Fill"
         >
           <i class="bi bi-paint-bucket"></i>
@@ -960,6 +975,7 @@
       <!-- Drag this icon to external apps (e.g. Slack) to share the file -->
       <button
         class="tool-btn cursor-grab active:cursor-grabbing"
+        aria-label="Drag to share file"
         data-tooltip="Drag to share file"
         onmousedown={async () => {
           if (filePath) {
@@ -1002,6 +1018,7 @@
       <button
         class="tool-btn"
         onclick={openFolder}
+        aria-label="Open save folder"
         data-tooltip="Open save folder"
       >
         <i class="bi bi-folder2-open"></i>
@@ -1014,6 +1031,7 @@
       class="tool-btn"
       onclick={() => captureScreen("take_screenshot_timer")}
       disabled={isCapturing}
+      aria-label="Timer capture"
       data-tooltip="Timer capture ({timerDelay}s)"
     >
       <i class="bi bi-stopwatch"></i>
@@ -1022,6 +1040,7 @@
       class="tool-btn bg-[#0066cc] text-white hover:bg-[#0077ee]"
       onclick={() => captureScreen()}
       disabled={isCapturing}
+      aria-label="Capture new area"
       data-tooltip="Capture new area"
     >
       <i class="bi bi-camera"></i>
