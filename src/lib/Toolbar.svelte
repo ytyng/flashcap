@@ -272,6 +272,7 @@
         class="tool-btn text-xs"
         class:active={maskSettings.mode === "mosaic"}
         onclick={() => (maskSettings.mode = "mosaic")}
+        aria-label="Mosaic"
         data-tooltip="Mosaic"
       >▦</button>
       <button
@@ -325,6 +326,7 @@
     <button
       class="tool-btn"
       onclick={onCopyPath}
+      aria-label="Copy file path"
       data-tooltip="Copy file path (⌘C)"
     >
       {#if copyPathSuccess}
@@ -336,6 +338,7 @@
     <button
       class="tool-btn"
       onclick={onCopyImage}
+      aria-label="Copy image"
       data-tooltip="Copy image (⌘⇧C)"
     >
       {#if copyImageSuccess}
