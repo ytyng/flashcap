@@ -388,9 +388,14 @@ pub fn run() {
                     // ファイル関連付けや Dock へのドロップで開かれた場合
                     let file_paths: Vec<String> = urls.iter()
                         .filter_map(|url| {
-                            // file:// URL をパスに変換
-                            if url.scheme() == "file" {
-                                url.to_file_path().ok().map(|p| p.to_string_lossy().to_string())
+                            if url.scheme() != "file" {
+                                return None;
+                            }
+                            let path = url.to_file_path().ok()?;
+                            // 対応する画像拡張子のみ許可
+                            let ext = path.extension()?.to_str()?.to_lowercase();
+                            if SUPPORTED_IMAGE_EXTENSIONS.contains(&ext.as_str()) {
+                                Some(path.to_string_lossy().to_string())
                             } else {
                                 None
                             }
