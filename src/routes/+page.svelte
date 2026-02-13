@@ -1047,7 +1047,7 @@
     </button>
   </div>
 
-  <div bind:this={viewportEl} class="flex-1 flex items-center justify-center overflow-hidden p-4">
+  <div bind:this={viewportEl} class="flex-1 flex items-center justify-center overflow-hidden p-5">
     {#if imageUrl}
       <div
         class="relative rounded shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden"
