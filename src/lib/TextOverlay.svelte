@@ -275,7 +275,24 @@
       </foreignObject>
     {:else}
       {#if t.text}
-        <g filter={filterAttr}>
+        {#if t.dropShadow && t.whiteStroke}
+          <!-- 白枠のみに影を適用 -->
+          <g filter="url(#text-shadow)">
+            {#each t.text.split("\n") as line, i}
+              <text
+                x={t.x + 4} y={t.y + t.fontSize + i * lineHeight}
+                font-size={t.fontSize}
+                font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+                font-weight={fontWeight}
+                font-style={fontStyle}
+                fill="none"
+                stroke="white"
+                stroke-width={3}
+                stroke-linejoin="round"
+              >{line}</text>
+            {/each}
+          </g>
+          <!-- 本体は影なし -->
           {#each t.text.split("\n") as line, i}
             <text
               x={t.x + 4} y={t.y + t.fontSize + i * lineHeight}
@@ -284,13 +301,26 @@
               font-weight={fontWeight}
               font-style={fontStyle}
               fill={t.color}
-              stroke={t.whiteStroke ? "white" : "none"}
-              stroke-width={t.whiteStroke ? 3 : 0}
-              stroke-linejoin="round"
-              paint-order="stroke"
             >{line}</text>
           {/each}
-        </g>
+        {:else}
+          <g filter={filterAttr}>
+            {#each t.text.split("\n") as line, i}
+              <text
+                x={t.x + 4} y={t.y + t.fontSize + i * lineHeight}
+                font-size={t.fontSize}
+                font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+                font-weight={fontWeight}
+                font-style={fontStyle}
+                fill={t.color}
+                stroke={t.whiteStroke ? "white" : "none"}
+                stroke-width={t.whiteStroke ? 3 : 0}
+                stroke-linejoin="round"
+                paint-order="stroke"
+              >{line}</text>
+            {/each}
+          </g>
+        {/if}
       {/if}
 
       {#if isSelected}

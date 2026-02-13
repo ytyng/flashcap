@@ -305,9 +305,37 @@
 
   {#each allShapes as shape (shape.id)}
     {@const isSelected = shape.id === selectedId}
-    {@const filterAttr = shape.dropShadow ? "url(#shape-shadow)" : undefined}
 
-    <g filter={filterAttr}>
+    {#if shape.dropShadow && shape.whiteStroke}
+      <!-- 白枠のみに影を適用 -->
+      {#if shape.type === "rect"}
+        <rect
+          x={shape.x} y={shape.y} width={shape.width} height={shape.height}
+          fill="none" stroke="white" stroke-width={shape.thickness + 4}
+          stroke-linejoin="round" filter="url(#shape-shadow)"
+        />
+        <rect
+          x={shape.x} y={shape.y} width={shape.width} height={shape.height}
+          fill="none" stroke={shape.color} stroke-width={shape.thickness}
+          stroke-linejoin="round"
+        />
+      {:else}
+        {@const cx = shape.x + shape.width / 2}
+        {@const cy = shape.y + shape.height / 2}
+        {@const rx = shape.width / 2}
+        {@const ry = shape.height / 2}
+        <ellipse
+          cx={cx} cy={cy} rx={rx} ry={ry}
+          fill="none" stroke="white" stroke-width={shape.thickness + 4}
+          filter="url(#shape-shadow)"
+        />
+        <ellipse
+          cx={cx} cy={cy} rx={rx} ry={ry}
+          fill="none" stroke={shape.color} stroke-width={shape.thickness}
+        />
+      {/if}
+    {:else}
+      {@const filterAttr = shape.dropShadow ? "url(#shape-shadow)" : undefined}
       {#if shape.type === "rect"}
         {#if shape.whiteStroke}
           <rect
@@ -319,7 +347,7 @@
         <rect
           x={shape.x} y={shape.y} width={shape.width} height={shape.height}
           fill="none" stroke={shape.color} stroke-width={shape.thickness}
-          stroke-linejoin="round"
+          stroke-linejoin="round" filter={filterAttr}
         />
       {:else}
         {@const cx = shape.x + shape.width / 2}
@@ -335,9 +363,10 @@
         <ellipse
           cx={cx} cy={cy} rx={rx} ry={ry}
           fill="none" stroke={shape.color} stroke-width={shape.thickness}
+          filter={filterAttr}
         />
       {/if}
-    </g>
+    {/if}
 
     {#if isSelected}
       <rect

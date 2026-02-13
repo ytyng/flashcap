@@ -374,6 +374,37 @@
         ctx.drawImage(img, 0, 0);
 
         // Coords are already in natural pixels, no scale conversion needed
+
+        // 影付き描画用の共有オフスクリーンキャンバス
+        // 各描画を1レイヤーにまとめることで、影のシームや二重影を防ぐ
+        let offCanvas: HTMLCanvasElement | null = null;
+        let offCtx: CanvasRenderingContext2D | null = null;
+        const needsOffscreen =
+          arrows.some((a) => a.dropShadow) ||
+          shapes.some((s) => s.dropShadow) ||
+          textAnnotations.some((t) => t.dropShadow && t.whiteStroke);
+        if (needsOffscreen) {
+          offCanvas = document.createElement("canvas");
+          offCanvas.width = canvas.width;
+          offCanvas.height = canvas.height;
+          offCtx = offCanvas.getContext("2d")!;
+        }
+
+        // オフスクリーンに描画 → 影付きで main canvas に転写するヘルパー
+        function transferWithShadow(
+          color: string, blur: number, dx: number, dy: number,
+        ) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = blur;
+          ctx.shadowOffsetX = dx;
+          ctx.shadowOffsetY = dy;
+          ctx.drawImage(offCanvas!, 0, 0);
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+
         for (const arrow of arrows) {
           const sx = arrow.startX;
           const sy = arrow.startY;
@@ -390,8 +421,9 @@
           const ux = dx / len;
           const uy = dy / len;
 
-          const lsX = sx - ux * hs;
-          const lsY = sy - uy * hs;
+          // 矢印頭の50%まで入り込ませてシームを防ぐ
+          const lsX = sx - ux * hs * 0.5;
+          const lsY = sy - uy * hs * 0.5;
 
           const perpX = -uy;
           const perpY = ux;
@@ -399,54 +431,61 @@
           const bX = sx - ux * hs;
           const bY = sy - uy * hs;
 
-          if (arrow.dropShadow) {
-            ctx.shadowColor = "rgba(0,0,0,0.5)";
-            ctx.shadowBlur = 4;
-            ctx.shadowOffsetX = 2;
-            ctx.shadowOffsetY = 2;
+          // 描画ヘルパー: 白枠を指定コンテキストに描画
+          function drawWhiteStroke(c: CanvasRenderingContext2D) {
+            c.strokeStyle = "white";
+            c.lineWidth = t + 4;
+            c.lineCap = "round";
+            c.beginPath();
+            c.moveTo(lsX, lsY);
+            c.lineTo(ex, ey);
+            c.stroke();
+
+            c.fillStyle = "white";
+            c.lineJoin = "round";
+            c.beginPath();
+            c.moveTo(sx, sy);
+            c.lineTo(bX + perpX * halfW, bY + perpY * halfW);
+            c.lineTo(bX - perpX * halfW, bY - perpY * halfW);
+            c.closePath();
+            c.fill();
+            c.lineWidth = 4;
+            c.stroke();
           }
 
-          if (arrow.whiteStroke) {
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = t + 4;
-            ctx.lineCap = "round";
-            ctx.beginPath();
-            ctx.moveTo(lsX, lsY);
-            ctx.lineTo(ex, ey);
-            ctx.stroke();
+          // 描画ヘルパー: 矢印本体を指定コンテキストに描画
+          function drawArrowBody(c: CanvasRenderingContext2D) {
+            c.strokeStyle = arrow.color;
+            c.lineWidth = t;
+            c.lineCap = "round";
+            c.beginPath();
+            c.moveTo(lsX, lsY);
+            c.lineTo(ex, ey);
+            c.stroke();
 
-            ctx.fillStyle = "white";
-            ctx.lineJoin = "round";
-            ctx.beginPath();
-            ctx.moveTo(sx, sy);
-            ctx.lineTo(bX + perpX * halfW, bY + perpY * halfW);
-            ctx.lineTo(bX - perpX * halfW, bY - perpY * halfW);
-            ctx.closePath();
-            ctx.fill();
-            ctx.lineWidth = 4;
-            ctx.stroke();
+            c.fillStyle = arrow.color;
+            c.beginPath();
+            c.moveTo(sx, sy);
+            c.lineTo(bX + perpX * halfW, bY + perpY * halfW);
+            c.lineTo(bX - perpX * halfW, bY - perpY * halfW);
+            c.closePath();
+            c.fill();
           }
 
-          ctx.strokeStyle = arrow.color;
-          ctx.lineWidth = t;
-          ctx.lineCap = "round";
-          ctx.beginPath();
-          ctx.moveTo(lsX, lsY);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-
-          ctx.fillStyle = arrow.color;
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(bX + perpX * halfW, bY + perpY * halfW);
-          ctx.lineTo(bX - perpX * halfW, bY - perpY * halfW);
-          ctx.closePath();
-          ctx.fill();
-
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
+          if (arrow.dropShadow && offCtx) {
+            offCtx.clearRect(0, 0, offCanvas!.width, offCanvas!.height);
+            if (arrow.whiteStroke) {
+              drawWhiteStroke(offCtx);
+              transferWithShadow("rgba(0,0,0,0.5)", 4, 2, 2);
+              drawArrowBody(ctx);
+            } else {
+              drawArrowBody(offCtx);
+              transferWithShadow("rgba(0,0,0,0.5)", 4, 2, 2);
+            }
+          } else {
+            if (arrow.whiteStroke) drawWhiteStroke(ctx);
+            drawArrowBody(ctx);
+          }
         }
 
         for (const mask of masks) {
@@ -491,76 +530,107 @@
 
         // Shapes (rect / ellipse)
         for (const shape of shapes) {
-          ctx.save();
-          if (shape.dropShadow) {
-            ctx.shadowColor = "rgba(0,0,0,0.5)";
-            ctx.shadowBlur = 4;
-            ctx.shadowOffsetX = 2;
-            ctx.shadowOffsetY = 2;
+          function drawShapeWhiteStroke(c: CanvasRenderingContext2D) {
+            if (shape.type === "rect") {
+              c.strokeStyle = "white";
+              c.lineWidth = shape.thickness + 4;
+              c.lineJoin = "round";
+              c.strokeRect(shape.x, shape.y, shape.width, shape.height);
+            } else {
+              const cx = shape.x + shape.width / 2;
+              const cy = shape.y + shape.height / 2;
+              c.strokeStyle = "white";
+              c.lineWidth = shape.thickness + 4;
+              c.beginPath();
+              c.ellipse(cx, cy, shape.width / 2, shape.height / 2, 0, 0, Math.PI * 2);
+              c.stroke();
+            }
           }
 
-          if (shape.type === "rect") {
-            if (shape.whiteStroke) {
-              ctx.strokeStyle = "white";
-              ctx.lineWidth = shape.thickness + 4;
-              ctx.lineJoin = "round";
-              ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+          function drawShapeBody(c: CanvasRenderingContext2D) {
+            if (shape.type === "rect") {
+              c.strokeStyle = shape.color;
+              c.lineWidth = shape.thickness;
+              c.lineJoin = "round";
+              c.strokeRect(shape.x, shape.y, shape.width, shape.height);
+            } else {
+              const cx = shape.x + shape.width / 2;
+              const cy = shape.y + shape.height / 2;
+              c.strokeStyle = shape.color;
+              c.lineWidth = shape.thickness;
+              c.beginPath();
+              c.ellipse(cx, cy, shape.width / 2, shape.height / 2, 0, 0, Math.PI * 2);
+              c.stroke();
             }
-            ctx.strokeStyle = shape.color;
-            ctx.lineWidth = shape.thickness;
-            ctx.lineJoin = "round";
-            ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
-          } else {
-            const cx = shape.x + shape.width / 2;
-            const cy = shape.y + shape.height / 2;
-            const rx = shape.width / 2;
-            const ry = shape.height / 2;
-            if (shape.whiteStroke) {
-              ctx.strokeStyle = "white";
-              ctx.lineWidth = shape.thickness + 4;
-              ctx.beginPath();
-              ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-              ctx.stroke();
-            }
-            ctx.strokeStyle = shape.color;
-            ctx.lineWidth = shape.thickness;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-            ctx.stroke();
           }
-          ctx.restore();
+
+          if (shape.dropShadow && offCtx) {
+            offCtx.clearRect(0, 0, offCanvas!.width, offCanvas!.height);
+            if (shape.whiteStroke) {
+              drawShapeWhiteStroke(offCtx);
+              transferWithShadow("rgba(0,0,0,0.5)", 4, 2, 2);
+              drawShapeBody(ctx);
+            } else {
+              drawShapeBody(offCtx);
+              transferWithShadow("rgba(0,0,0,0.5)", 4, 2, 2);
+            }
+          } else {
+            if (shape.whiteStroke) drawShapeWhiteStroke(ctx);
+            drawShapeBody(ctx);
+          }
         }
 
         // Text annotations
         for (const t of textAnnotations) {
           if (!t.text) continue;
-          ctx.save();
-          if (t.dropShadow) {
-            ctx.shadowColor = "rgba(0,0,0,0.6)";
-            ctx.shadowBlur = 3;
-            ctx.shadowOffsetX = 1;
-            ctx.shadowOffsetY = 1;
-          }
           const fontStyle = t.italic ? "italic" : "";
           const fontWeight = t.bold ? "900" : "normal";
-          ctx.font = `${fontStyle} ${fontWeight} ${t.fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`.trim();
-          ctx.textBaseline = "top";
+          const fontStr = `${fontStyle} ${fontWeight} ${t.fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`.trim();
           const lineHeight = t.fontSize * 1.3;
           const lines = t.text.split("\n");
-          for (let i = 0; i < lines.length; i++) {
-            const ly = t.y + i * lineHeight;
-            if (t.whiteStroke) {
-              ctx.strokeStyle = "white";
-              ctx.lineWidth = 3;
-              ctx.lineJoin = "round";
-              ctx.strokeText(lines[i], t.x + 4, ly);
-              // stroke 後に shadow を無効化し、fill には shadow をかけない
-              ctx.shadowColor = "transparent";
+
+          if (t.dropShadow && t.whiteStroke && offCtx) {
+            // 白枠をオフスクリーンに描画 → 影付きで転写
+            offCtx.clearRect(0, 0, offCanvas!.width, offCanvas!.height);
+            offCtx.font = fontStr;
+            offCtx.textBaseline = "top";
+            offCtx.strokeStyle = "white";
+            offCtx.lineWidth = 3;
+            offCtx.lineJoin = "round";
+            for (let i = 0; i < lines.length; i++) {
+              offCtx.strokeText(lines[i], t.x + 4, t.y + i * lineHeight);
             }
+            transferWithShadow("rgba(0,0,0,0.6)", 3, 1, 1);
+            // 本体は影なしで直接描画
+            ctx.font = fontStr;
+            ctx.textBaseline = "top";
             ctx.fillStyle = t.color;
-            ctx.fillText(lines[i], t.x + 4, ly);
+            for (let i = 0; i < lines.length; i++) {
+              ctx.fillText(lines[i], t.x + 4, t.y + i * lineHeight);
+            }
+          } else {
+            ctx.save();
+            if (t.dropShadow) {
+              ctx.shadowColor = "rgba(0,0,0,0.6)";
+              ctx.shadowBlur = 3;
+              ctx.shadowOffsetX = 1;
+              ctx.shadowOffsetY = 1;
+            }
+            ctx.font = fontStr;
+            ctx.textBaseline = "top";
+            for (let i = 0; i < lines.length; i++) {
+              const ly = t.y + i * lineHeight;
+              if (t.whiteStroke) {
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = 3;
+                ctx.lineJoin = "round";
+                ctx.strokeText(lines[i], t.x + 4, ly);
+              }
+              ctx.fillStyle = t.color;
+              ctx.fillText(lines[i], t.x + 4, ly);
+            }
+            ctx.restore();
           }
-          ctx.restore();
         }
 
         canvas.toBlob((blob) => {

@@ -43,7 +43,7 @@
     return `${tipX},${tipY} ${bX + perpX * halfW},${bY + perpY * halfW} ${bX - perpX * halfW},${bY - perpY * halfW}`;
   }
 
-  // Shorten line start to arrowhead base
+  // 棒の開始点を矢印頭の内側まで延長し、影描画時のシームを防ぐ
   function lineStart(arrow: Arrow): { x: number; y: number } {
     const dx = arrow.startX - arrow.endX;
     const dy = arrow.startY - arrow.endY;
@@ -53,9 +53,10 @@
     const hs = headSize(arrow.thickness);
     const ux = dx / len;
     const uy = dy / len;
+    // 矢印頭の50%まで入り込ませる（ポリゴンが上に描画されるので見た目は変わらない）
     return {
-      x: arrow.startX - ux * hs,
-      y: arrow.startY - uy * hs,
+      x: arrow.startX - ux * hs * 0.5,
+      y: arrow.startY - uy * hs * 0.5,
     };
   }
 
@@ -230,9 +231,39 @@
     {@const ls = lineStart(arrow)}
     {@const hp = arrowHeadPoints(arrow)}
     {@const isSelected = arrow.id === selectedId}
-    {@const filterAttr = arrow.dropShadow ? "url(#arrow-shadow)" : undefined}
 
-    <g filter={filterAttr}>
+    {#if arrow.dropShadow && arrow.whiteStroke}
+      <!-- 白枠のみに影を適用 -->
+      <g filter="url(#arrow-shadow)">
+        <line
+          x1={ls.x} y1={ls.y} x2={arrow.endX} y2={arrow.endY}
+          stroke="white"
+          stroke-width={arrow.thickness + 4}
+          stroke-linecap="round"
+        />
+        <polygon points={hp} fill="white" stroke="white" stroke-width="4" stroke-linejoin="round" />
+      </g>
+      <!-- 本体は影なし -->
+      <line
+        x1={ls.x} y1={ls.y} x2={arrow.endX} y2={arrow.endY}
+        stroke={arrow.color}
+        stroke-width={arrow.thickness}
+        stroke-linecap="round"
+      />
+      <polygon points={hp} fill={arrow.color} />
+    {:else if arrow.dropShadow}
+      <!-- 影あり・白枠なし -->
+      <g filter="url(#arrow-shadow)">
+        <line
+          x1={ls.x} y1={ls.y} x2={arrow.endX} y2={arrow.endY}
+          stroke={arrow.color}
+          stroke-width={arrow.thickness}
+          stroke-linecap="round"
+        />
+        <polygon points={hp} fill={arrow.color} />
+      </g>
+    {:else}
+      <!-- 影なし -->
       {#if arrow.whiteStroke}
         <line
           x1={ls.x} y1={ls.y} x2={arrow.endX} y2={arrow.endY}
@@ -242,7 +273,6 @@
         />
         <polygon points={hp} fill="white" stroke="white" stroke-width="4" stroke-linejoin="round" />
       {/if}
-
       <line
         x1={ls.x} y1={ls.y} x2={arrow.endX} y2={arrow.endY}
         stroke={arrow.color}
@@ -250,7 +280,7 @@
         stroke-linecap="round"
       />
       <polygon points={hp} fill={arrow.color} />
-    </g>
+    {/if}
 
     {#if isSelected}
       <circle cx={arrow.startX} cy={arrow.startY} r={6 / scale} fill="white" stroke="#0066cc" stroke-width={2 / scale} class="handle" />
