@@ -12,6 +12,7 @@
   import MaskOverlay from "$lib/MaskOverlay.svelte";
   import ShapeOverlay from "$lib/ShapeOverlay.svelte";
   import TextOverlay from "$lib/TextOverlay.svelte";
+  import Toolbar from "$lib/Toolbar.svelte";
 
   let arrowOverlayRef = $state<ReturnType<typeof ArrowOverlay> | null>(null);
   let maskOverlayRef = $state<ReturnType<typeof MaskOverlay> | null>(null);
@@ -769,333 +770,41 @@
     deactivateAllTools();
     textToolActive = !wasActive;
   }
+
+  async function handleDragFile() {
+    if (filePath) {
+      await saveCompositeToFile();
+      startDrag({ item: [filePath], icon: filePath });
+    }
+  }
 </script>
 
-<div class="flex flex-col h-screen bg-[#1a1a1a] text-white font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
-  <div class="flex items-center gap-2 px-3 py-2 bg-[#2d2d2d] border-b border-[#3d3d3d] min-h-[40px]">
-    <button
-      class="tool-btn"
-      class:active={arrowToolActive}
-      onclick={toggleArrowTool}
-      aria-label="Arrow tool"
-      data-tooltip="Arrow tool"
-    >
-      <i class="bi bi-arrow-up-right"></i>
-    </button>
-
-    {#if arrowToolActive}
-      <div class="tool-settings">
-        <input
-          type="color"
-          class="color-picker"
-          bind:value={arrowSettings.color}
-          data-tooltip="Arrow color"
-        />
-
-        <select
-          class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
-          bind:value={arrowSettings.thickness}
-          data-tooltip="Arrow thickness"
-        >
-          <option value={2}>Thin</option>
-          <option value={4}>Medium</option>
-          <option value={6}>Thick</option>
-          <option value={8}>Extra thick</option>
-        </select>
-
-        <button
-          class="tool-btn"
-          class:active={arrowSettings.whiteStroke}
-          onclick={() => (arrowSettings.whiteStroke = !arrowSettings.whiteStroke)}
-          aria-label="White border"
-          data-tooltip="White border"
-        >
-          <i class="bi bi-back"></i>
-        </button>
-
-        <button
-          class="tool-btn"
-          class:active={arrowSettings.dropShadow}
-          onclick={() => (arrowSettings.dropShadow = !arrowSettings.dropShadow)}
-          aria-label="Drop shadow"
-          data-tooltip="Drop shadow"
-        >
-          <i class="bi bi-shadows"></i>
-        </button>
-      </div>
-    {/if}
-
-    {#snippet shapeSettingsPanel()}
-      <div class="tool-settings">
-        <input
-          type="color"
-          class="color-picker"
-          bind:value={shapeSettings.color}
-          data-tooltip="Shape color"
-        />
-
-        <i class="bi bi-border-width text-[#999] text-xs"></i>
-        <select
-          class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
-          bind:value={shapeSettings.thickness}
-          data-tooltip="Shape thickness"
-        >
-          <option value={2}>Thin</option>
-          <option value={4}>Medium</option>
-          <option value={6}>Thick</option>
-          <option value={8}>Extra thick</option>
-        </select>
-
-        <button
-          class="tool-btn"
-          class:active={shapeSettings.whiteStroke}
-          onclick={() => (shapeSettings.whiteStroke = !shapeSettings.whiteStroke)}
-          aria-label="White border"
-          data-tooltip="White border"
-        >
-          <i class="bi bi-back"></i>
-        </button>
-
-        <button
-          class="tool-btn"
-          class:active={shapeSettings.dropShadow}
-          onclick={() => (shapeSettings.dropShadow = !shapeSettings.dropShadow)}
-          aria-label="Drop shadow"
-          data-tooltip="Drop shadow"
-        >
-          <i class="bi bi-shadows"></i>
-        </button>
-      </div>
-    {/snippet}
-
-    <button
-      class="tool-btn"
-      class:active={shapeToolActive && shapeSettings.type === "rect"}
-      onclick={() => toggleShapeTool("rect")}
-      aria-label="Rectangle tool"
-      data-tooltip="Rectangle tool"
-    >
-      <i class="bi bi-square"></i>
-    </button>
-
-    {#if shapeToolActive && shapeSettings.type === "rect"}
-      {@render shapeSettingsPanel()}
-    {/if}
-
-    <button
-      class="tool-btn"
-      class:active={shapeToolActive && shapeSettings.type === "ellipse"}
-      onclick={() => toggleShapeTool("ellipse")}
-      aria-label="Ellipse tool"
-      data-tooltip="Ellipse tool"
-    >
-      <i class="bi bi-circle"></i>
-    </button>
-
-    {#if shapeToolActive && shapeSettings.type === "ellipse"}
-      {@render shapeSettingsPanel()}
-    {/if}
-
-    <button
-      class="tool-btn"
-      class:active={textToolActive}
-      onclick={toggleTextTool}
-      aria-label="Text tool"
-      data-tooltip="Text tool"
-    >
-      <i class="bi bi-fonts" style="font-size: 125%"></i>
-    </button>
-
-    {#if textToolActive}
-      <div class="tool-settings">
-        <input
-          type="color"
-          class="color-picker"
-          value={textSettings.color}
-          oninput={(e) => updateTextSetting("color", (e.target as HTMLInputElement).value)}
-          data-tooltip="Text color"
-        />
-
-        <select
-          class="bg-[#3d3d3d] text-[#ccc] border border-[#555] rounded px-1.5 py-1 text-xs cursor-pointer"
-          value={textSettings.fontSize}
-          onchange={(e) => updateTextSetting("fontSize", Number((e.target as HTMLSelectElement).value))}
-          data-tooltip="Font size"
-        >
-          <option value={16}>16px</option>
-          <option value={20}>20px</option>
-          <option value={24}>24px</option>
-          <option value={32}>32px</option>
-          <option value={48}>48px</option>
-        </select>
-
-        <button
-          class="tool-btn"
-          class:active={textSettings.bold}
-          onclick={() => updateTextSetting("bold", !textSettings.bold)}
-          aria-label="Bold"
-          data-tooltip="Bold"
-        >
-          <i class="bi bi-type-bold"></i>
-        </button>
-
-        <button
-          class="tool-btn"
-          class:active={textSettings.italic}
-          onclick={() => updateTextSetting("italic", !textSettings.italic)}
-          aria-label="Italic"
-          data-tooltip="Italic"
-        >
-          <i class="bi bi-type-italic"></i>
-        </button>
-
-        <button
-          class="tool-btn"
-          class:active={textSettings.whiteStroke}
-          onclick={() => updateTextSetting("whiteStroke", !textSettings.whiteStroke)}
-          aria-label="White border"
-          data-tooltip="White border"
-        >
-          <i class="bi bi-back"></i>
-        </button>
-
-        <button
-          class="tool-btn"
-          class:active={textSettings.dropShadow}
-          onclick={() => updateTextSetting("dropShadow", !textSettings.dropShadow)}
-          aria-label="Drop shadow"
-          data-tooltip="Drop shadow"
-        >
-          <i class="bi bi-shadows"></i>
-        </button>
-      </div>
-    {/if}
-
-    <button
-      class="tool-btn"
-      class:active={maskToolActive}
-      onclick={toggleMaskTool}
-      aria-label="Mask tool"
-      data-tooltip="Mask tool"
-    >
-      <i class="bi bi-grid-3x3"></i>
-    </button>
-
-    {#if maskToolActive}
-      <div class="tool-settings">
-        <button
-          class="tool-btn text-xs"
-          class:active={maskSettings.mode === "mosaic"}
-          onclick={() => (maskSettings.mode = "mosaic")}
-          data-tooltip="Mosaic"
-        >▦</button>
-        <button
-          class="tool-btn text-xs"
-          class:active={maskSettings.mode === "blur"}
-          onclick={() => (maskSettings.mode = "blur")}
-          aria-label="Blur"
-          data-tooltip="Blur"
-        >
-          <i class="bi bi-droplet-half"></i>
-        </button>
-        <button
-          class="tool-btn text-xs"
-          class:active={maskSettings.mode === "fill"}
-          onclick={() => (maskSettings.mode = "fill")}
-          aria-label="Fill"
-          data-tooltip="Fill"
-        >
-          <i class="bi bi-paint-bucket"></i>
-        </button>
-
-        {#if maskSettings.mode === "fill"}
-          <input
-            type="color"
-            class="color-picker"
-            bind:value={maskSettings.color}
-            data-tooltip="Fill color"
-          />
-        {/if}
-      </div>
-    {/if}
-
-    <div class="w-px h-6 bg-[#3d3d3d]"></div>
-
-    {#if filePath}
-      <!-- Drag this icon to external apps (e.g. Slack) to share the file -->
-      <button
-        class="tool-btn cursor-grab active:cursor-grabbing"
-        aria-label="Drag to share file"
-        data-tooltip="Drag to share file"
-        onmousedown={async () => {
-          if (filePath) {
-            await saveCompositeToFile();
-            startDrag({ item: [filePath], icon: filePath });
-          }
-        }}
-      >
-        <i class="bi bi-grip-vertical"></i>
-      </button>
-      <input
-        type="text"
-        class="flex-1 min-w-0 text-[13px] text-[#aaa] bg-transparent border-none outline-none"
-        value={filePath}
-        readonly
-        title={filePath}
-      />
-      <button
-        class="tool-btn"
-        onclick={copyPath}
-        data-tooltip="Copy file path (⌘C)"
-      >
-        {#if copyPathSuccess}
-          <i class="bi bi-check-lg"></i>
-        {:else}
-          <i class="bi bi-clipboard"></i>
-        {/if}
-      </button>
-      <button
-        class="tool-btn"
-        onclick={copyImage}
-        data-tooltip="Copy image (⌘⇧C)"
-      >
-        {#if copyImageSuccess}
-          <i class="bi bi-check-lg"></i>
-        {:else}
-          <i class="bi bi-image"></i>
-        {/if}
-      </button>
-      <button
-        class="tool-btn"
-        onclick={openFolder}
-        aria-label="Open save folder"
-        data-tooltip="Open save folder"
-      >
-        <i class="bi bi-folder2-open"></i>
-      </button>
-    {/if}
-
-    <div class="w-px h-6 bg-[#3d3d3d]"></div>
-
-    <button
-      class="tool-btn"
-      onclick={() => captureScreen("take_screenshot_timer")}
-      disabled={isCapturing}
-      aria-label="Timer capture"
-      data-tooltip="Timer capture ({timerDelay}s)"
-    >
-      <i class="bi bi-stopwatch"></i>
-    </button>
-    <button
-      class="tool-btn bg-[#0066cc] text-white hover:bg-[#0077ee]"
-      onclick={() => captureScreen()}
-      disabled={isCapturing}
-      aria-label="Capture new area"
-      data-tooltip="Capture new area"
-    >
-      <i class="bi bi-camera"></i>
-    </button>
-  </div>
+<div class="flex flex-col h-screen bg-neutral-900 text-white font-[-apple-system,BlinkMacSystemFont,'Segoe_UI',Roboto,sans-serif]">
+  <Toolbar
+    {arrowToolActive}
+    {maskToolActive}
+    {shapeToolActive}
+    {textToolActive}
+    {arrowSettings}
+    {maskSettings}
+    {shapeSettings}
+    {textSettings}
+    {filePath}
+    {copyPathSuccess}
+    {copyImageSuccess}
+    {isCapturing}
+    {timerDelay}
+    onToggleArrowTool={toggleArrowTool}
+    onToggleMaskTool={toggleMaskTool}
+    onToggleShapeTool={toggleShapeTool}
+    onToggleTextTool={toggleTextTool}
+    onCopyPath={copyPath}
+    onCopyImage={copyImage}
+    onOpenFolder={openFolder}
+    onCapture={captureScreen}
+    onDragFile={handleDragFile}
+    onUpdateTextSetting={updateTextSetting}
+  />
 
   <div bind:this={viewportEl} class="flex-1 flex items-center justify-center overflow-hidden p-5">
     {#if imageUrl}
@@ -1153,108 +862,17 @@
         />
       </div>
     {:else if isCapturing}
-      <div class="text-[#666] text-sm">Capturing...</div>
+      <div class="text-neutral-500 text-sm">Capturing...</div>
     {:else}
-      <div class="text-[#666] text-sm">No image</div>
+      <div class="text-neutral-500 text-sm">No image</div>
     {/if}
   </div>
 </div>
 
 <style>
-  .tool-settings {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background-color: #363636;
-    margin: -0.5rem 0;
-    padding: 0.5rem 0.5rem;
-    border-left: 1px solid #4a4a4a;
-  }
-
   :global(body) {
     margin: 0;
     padding: 0;
     overflow: hidden;
-  }
-
-  .tool-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: #ccc;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-    font-size: 16px;
-  }
-
-  .tool-btn:hover:not(:disabled) {
-    background: #3d3d3d;
-    color: #fff;
-  }
-
-  .tool-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .tool-btn.active {
-    background: #0066cc;
-    color: #fff;
-  }
-
-  .tool-btn.active:hover:not(:disabled) {
-    background: #1a7adf;
-  }
-
-  /* Instant tooltip via data-tooltip attribute + ::after */
-  [data-tooltip] {
-    position: relative;
-  }
-
-  [data-tooltip]::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 4px 8px;
-    background: #000;
-    color: #eee;
-    font-size: 11px;
-    line-height: 1.3;
-    border-radius: 4px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.1s;
-    z-index: 100;
-  }
-
-  [data-tooltip]:hover::after {
-    opacity: 1;
-  }
-
-  .color-picker {
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 4px;
-    padding: 0;
-    cursor: pointer;
-    background: transparent;
-  }
-
-  .color-picker::-webkit-color-swatch-wrapper {
-    padding: 2px;
-  }
-
-  .color-picker::-webkit-color-swatch {
-    border: 1px solid #555;
-    border-radius: 3px;
   }
 </style>
