@@ -6,6 +6,8 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_store::StoreExt;
 
+const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "tif"];
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScreenshotResult {
     pub width: usize,
@@ -107,21 +109,31 @@ fn resize_window_for_image(app: &tauri::AppHandle, width: usize, height: usize) 
     }
 }
 
-/// screencapture 完了後のファイルを読み込んで ScreenshotResult を生成
-fn load_screenshot_result(file_path: String) -> Result<ScreenshotResult, String> {
+/// 画像ファイルを読み込んで ScreenshotResult を生成
+fn load_image_result(file_path: String) -> Result<ScreenshotResult, String> {
     if !std::path::Path::new(&file_path).exists() {
-        return Err("Screenshot was cancelled".to_string());
+        return Err("Image file does not exist".to_string());
     }
 
     let absolute_path = std::fs::canonicalize(&file_path)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or(file_path);
 
-    let png_data = std::fs::read(&absolute_path)
-        .map_err(|e| format!("Failed to read screenshot: {}", e))?;
+    let img_data = std::fs::read(&absolute_path)
+        .map_err(|e| format!("Failed to read image: {}", e))?;
 
-    let img = image::load_from_memory(&png_data)
+    let img = image::load_from_memory(&img_data)
         .map_err(|e| format!("Failed to decode image: {}", e))?;
+
+    // PNG 以外の形式は PNG にエンコードし直す
+    let png_data = if image::guess_format(&img_data).map(|f| f == image::ImageFormat::Png).unwrap_or(false) {
+        img_data
+    } else {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut buf, image::ImageFormat::Png)
+            .map_err(|e| format!("Failed to re-encode as PNG: {}", e))?;
+        buf.into_inner()
+    };
 
     Ok(ScreenshotResult {
         width: img.width() as usize,
@@ -153,7 +165,7 @@ async fn take_screenshot_interactive(
         return Err("Screenshot was cancelled".to_string());
     }
 
-    let result = load_screenshot_result(file_path)?;
+    let result = load_image_result(file_path)?;
     resize_window_for_image(&app, result.width, result.height);
     Ok(result)
 }
@@ -202,7 +214,18 @@ async fn take_screenshot_timer(
         return Err("Screenshot was cancelled".to_string());
     }
 
-    let result = load_screenshot_result(file_path)?;
+    let result = load_image_result(file_path)?;
+    resize_window_for_image(&app, result.width, result.height);
+    Ok(result)
+}
+
+/// 外部からの画像ファイルを開く
+#[tauri::command]
+fn load_image_file(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<ScreenshotResult, String> {
+    let result = load_image_result(path)?;
     resize_window_for_image(&app, result.width, result.height);
     Ok(result)
 }
@@ -264,13 +287,27 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // 既に起動中のインスタンスに対して再度起動コマンドが来た場合
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.set_focus();
             }
-            let _ = app.emit("reactivate", ());
+            // args[0] はバイナリパス。args[1..] がファイルパス
+            let file_paths: Vec<String> = args.iter().skip(1)
+                .filter(|a| {
+                    let p = std::path::Path::new(a);
+                    p.exists() && p.extension().map_or(false, |ext| {
+                        ext.to_str().map_or(false, |e| SUPPORTED_IMAGE_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+                    })
+                })
+                .cloned()
+                .collect();
+            if !file_paths.is_empty() {
+                let _ = app.emit("open-file", file_paths);
+            } else {
+                let _ = app.emit("reactivate", ());
+            }
         }))
         .setup(|app| {
             let handle = app.handle();
@@ -334,17 +371,40 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![take_screenshot_interactive, take_screenshot_timer, write_image_to_file])
+        .invoke_handler(tauri::generate_handler![take_screenshot_interactive, take_screenshot_timer, write_image_to_file, load_image_file])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if let tauri::RunEvent::Reopen { .. } = event {
-                // Dock アイコンクリック時
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
+            match event {
+                tauri::RunEvent::Reopen { .. } => {
+                    // Dock アイコンクリック時
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    let _ = app.emit("reactivate", ());
                 }
-                let _ = app.emit("reactivate", ());
+                tauri::RunEvent::Opened { urls } => {
+                    // ファイル関連付けや Dock へのドロップで開かれた場合
+                    let file_paths: Vec<String> = urls.iter()
+                        .filter_map(|url| {
+                            // file:// URL をパスに変換
+                            if url.scheme() == "file" {
+                                url.to_file_path().ok().map(|p| p.to_string_lossy().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    if !file_paths.is_empty() {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                        let _ = app.emit("open-file", file_paths);
+                    }
+                }
+                _ => {}
             }
         });
 }

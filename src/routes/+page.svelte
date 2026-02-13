@@ -7,6 +7,7 @@
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { startDrag } from "@crabnebula/tauri-plugin-drag";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import ArrowOverlay from "$lib/ArrowOverlay.svelte";
   import MaskOverlay from "$lib/MaskOverlay.svelte";
   import ShapeOverlay from "$lib/ShapeOverlay.svelte";
@@ -24,6 +25,8 @@
     data: string;
     file_path: string;
   }
+
+  const SUPPORTED_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "tif"];
 
   let isCapturing = $state(false);
   let timerDelay = $state(5);
@@ -211,6 +214,24 @@
       captureScreen();
     });
 
+    // ファイル関連付けや Dock ドロップで開かれた場合
+    const unlistenOpenFile = listen<string[]>("open-file", (event) => {
+      if (event.payload.length > 0) {
+        loadImageFile(event.payload[0]);
+      }
+    });
+
+    // ウインドウへのファイルドロップ
+    const unlistenDragDrop = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "drop" && event.payload.paths.length > 0) {
+        const path = event.payload.paths[0];
+        const ext = path.split(".").pop()?.toLowerCase() ?? "";
+        if (SUPPORTED_IMAGE_EXTENSIONS.includes(ext)) {
+          loadImageFile(path);
+        }
+      }
+    });
+
     function handleKeydown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -230,6 +251,8 @@
     return () => {
       window.removeEventListener("keydown", handleKeydown);
       unlisten.then((fn) => fn());
+      unlistenOpenFile.then((fn) => fn());
+      unlistenDragDrop.then((fn) => fn());
       resizeObserver.disconnect();
     };
   });
@@ -262,6 +285,24 @@
   function updateTextSetting<K extends keyof TextSettings>(key: K, value: TextSettings[K]) {
     textSettings[key] = value;
     textOverlayRef?.updateActiveAttribute(key, value);
+  }
+
+  async function loadImageFile(path: string) {
+    try {
+      const result = await invoke<ScreenshotResult>("load_image_file", { path });
+      imageBase64 = result.data;
+      imageUrl = `data:image/png;base64,${result.data}`;
+      filePath = result.file_path;
+      arrows = [];
+      masks = [];
+      shapes = [];
+      textAnnotations = [];
+      undoHistory = [];
+      naturalWidth = 0;
+      naturalHeight = 0;
+    } catch (e) {
+      console.error("Failed to load image:", e);
+    }
   }
 
   async function captureScreen(command: string = "take_screenshot_interactive") {
