@@ -64,6 +64,49 @@ fn get_screenshot_path(app: &tauri::AppHandle) -> String {
     dir.join(filename).to_string_lossy().to_string()
 }
 
+/// スクリーンショットの画像サイズに合わせてメインウインドウを拡大する
+/// 天地左右 +20px の余白を確保し、モニターの作業領域を上限とする
+/// ウインドウが画像より大きい場合は縮小しない
+fn resize_window_for_image(app: &tauri::AppHandle, width: usize, height: usize) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+
+    let scale = monitor.scale_factor();
+    let padding = 20.0;
+    let toolbar_h = 41.0; // ツールバー 40px + ボーダー 1px
+
+    // 画像の論理サイズ（screen points）
+    let img_w = width as f64 / scale;
+    let img_h = height as f64 / scale;
+
+    // 画像を等倍表示するのに必要なウインドウ内部サイズ
+    let desired_w = img_w + padding * 2.0;
+    let desired_h = img_h + padding * 2.0 + toolbar_h;
+
+    // 作業領域（メニューバー・Dock を除いた領域）の論理サイズ
+    let work = monitor.work_area();
+    let max_w = work.size.width as f64 / scale;
+    let max_h = work.size.height as f64 / scale;
+
+    // 現在のウインドウ内部サイズ（論理ピクセル）
+    let Ok(cur) = window.inner_size() else { return };
+    let cur_w = cur.width as f64 / scale;
+    let cur_h = cur.height as f64 / scale;
+
+    // 現在より大きい場合のみ拡大、作業領域で上限
+    let new_w = desired_w.max(cur_w).min(max_w);
+    let new_h = desired_h.max(cur_h).min(max_h);
+
+    if (new_w - cur_w).abs() > 1.0 || (new_h - cur_h).abs() > 1.0 {
+        let _ = window.set_size(tauri::LogicalSize::new(new_w, new_h));
+        let _ = window.center();
+    }
+}
+
 /// screencapture 完了後のファイルを読み込んで ScreenshotResult を生成
 fn load_screenshot_result(file_path: String) -> Result<ScreenshotResult, String> {
     if !std::path::Path::new(&file_path).exists() {
@@ -110,7 +153,9 @@ async fn take_screenshot_interactive(
         return Err("Screenshot was cancelled".to_string());
     }
 
-    load_screenshot_result(file_path)
+    let result = load_screenshot_result(file_path)?;
+    resize_window_for_image(&app, result.width, result.height);
+    Ok(result)
 }
 
 /// ウィンドウキャプチャー時のドロップシャドウを除外するか（デフォルト true）
@@ -157,7 +202,9 @@ async fn take_screenshot_timer(
         return Err("Screenshot was cancelled".to_string());
     }
 
-    load_screenshot_result(file_path)
+    let result = load_screenshot_result(file_path)?;
+    resize_window_for_image(&app, result.width, result.height);
+    Ok(result)
 }
 
 /// base64 PNG データをファイルに書き出す
