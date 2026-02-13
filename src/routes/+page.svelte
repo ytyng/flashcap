@@ -870,9 +870,9 @@
 </div>
 
 <style>
+  @reference "../app.css";
+
   :global(body) {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
+    @apply m-0 p-0 overflow-hidden;
   }
 </style>

@@ -334,25 +334,14 @@
 </svg>
 
 <style>
+  @reference "../app.css";
+
   .text-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    @apply absolute top-0 left-0 w-full h-full;
   }
 
   .text-edit-input {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid #0066cc;
-    border-radius: 2px;
-    outline: none;
-    padding: 2px 4px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    resize: none;
-    overflow: hidden;
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
+    @apply bg-white/15 border border-[#0066cc] rounded-sm outline-none
+      px-1 py-0.5 font-sans resize-none overflow-hidden box-border w-full h-full;
   }
 </style>

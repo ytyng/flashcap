@@ -380,100 +380,65 @@
 </div>
 
 <style>
+  @reference "../app.css";
+
   .tool-settings {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background-color: var(--color-neutral-700);
-    margin: -0.5rem 0;
-    padding: 0.5rem 0.5rem;
-    border-left: 1px solid var(--color-neutral-600);
+    @apply flex items-center gap-2 bg-neutral-700
+      -my-2 px-2 py-2 border-l border-neutral-600;
   }
 
   .tool-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--color-neutral-300);
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-    font-size: 16px;
+    @apply flex items-center justify-center w-8 h-8
+      border-none rounded-md bg-transparent text-neutral-300
+      cursor-pointer transition-[background,color] duration-150 text-base;
   }
 
   .tool-btn:hover:not(:disabled) {
-    background: var(--color-neutral-700);
-    color: #fff;
+    @apply bg-neutral-700 text-white;
   }
 
   .tool-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    @apply opacity-50 cursor-not-allowed;
   }
 
   .tool-btn.active {
-    background: var(--color-blue-600);
-    color: #fff;
+    @apply bg-blue-600 text-white;
   }
 
   .tool-btn.active:hover:not(:disabled) {
-    background: var(--color-blue-500);
+    @apply bg-blue-500;
   }
 
   .toolbar-divider {
-    width: 1px;
-    height: 1.5rem;
-    background-color: var(--color-neutral-700);
+    @apply w-px h-6 bg-neutral-700;
   }
 
   /* Instant tooltip via data-tooltip attribute + ::after */
   [data-tooltip] {
-    position: relative;
+    @apply relative;
   }
 
   [data-tooltip]::after {
     content: attr(data-tooltip);
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 4px 8px;
-    background: #000;
-    color: var(--color-neutral-200);
-    font-size: 11px;
-    line-height: 1.3;
-    border-radius: 4px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.1s;
-    z-index: 100;
+    @apply absolute top-[calc(100%+6px)] left-1/2 -translate-x-1/2
+      px-2 py-1 bg-black text-neutral-200 text-[11px] leading-tight
+      rounded whitespace-nowrap pointer-events-none opacity-0
+      transition-opacity duration-100 z-100;
   }
 
   [data-tooltip]:hover::after {
-    opacity: 1;
+    @apply opacity-100;
   }
 
   .color-picker {
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 4px;
-    padding: 0;
-    cursor: pointer;
-    background: transparent;
+    @apply w-7 h-7 border-none rounded p-0 cursor-pointer bg-transparent;
   }
 
   .color-picker::-webkit-color-swatch-wrapper {
-    padding: 2px;
+    @apply p-0.5;
   }
 
   .color-picker::-webkit-color-swatch {
-    border: 1px solid var(--color-neutral-600);
-    border-radius: 3px;
+    @apply border border-neutral-600 rounded-sm;
   }
 </style>

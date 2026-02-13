@@ -401,15 +401,13 @@
 </svg>
 
 <style>
+  @reference "../app.css";
+
   .shape-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    @apply absolute top-0 left-0 w-full h-full;
   }
 
   .handle {
-    pointer-events: auto;
+    @apply pointer-events-auto;
   }
 </style>
