@@ -1,5 +1,12 @@
 <script lang="ts">
   import type { TextAnnotation, TextSettings } from "./types";
+  import {
+    exceedsDragSlop,
+    hitsText,
+    LINE_HEIGHT_RATIO,
+    textBBox,
+    topmostTextAt,
+  } from "./textHit";
 
   interface Props {
     texts: TextAnnotation[];
@@ -16,6 +23,10 @@
   let selectedId = $state<string | null>(null);
   let editingId = $state<string | null>(null);
   let dragging = $state<"move" | null>(null);
+  /** その移動で undo を積んだか。押しただけの空振りで積まないための印 */
+  let dragMutated = $state(false);
+  /** その編集で undo を積んだか。開いて閉じただけの空振りで積まないための印 */
+  let editMutated = $state(false);
   let dragStart = $state<{ x: number; y: number } | null>(null);
   let dragOrigPos = $state<{ x: number; y: number } | null>(null);
   let hoverCursor = $state<string>("default");
@@ -30,24 +41,11 @@
     return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
   }
 
-  // テキストのバウンディングボックスを推定
-  function getTextBBox(t: TextAnnotation): { x: number; y: number; width: number; height: number } {
-    // 各行を考慮した幅推定
-    const lines = t.text.split("\n");
-    const lineHeight = t.fontSize * 1.3;
-    const maxLineWidth = Math.max(...lines.map((line) => line.length * t.fontSize * 0.6), t.fontSize * 2);
-    return {
-      x: t.x,
-      y: t.y,
-      width: maxLineWidth + 8,
-      height: lineHeight * lines.length + 8,
-    };
-  }
-
-  function hitTestText(t: TextAnnotation, px: number, py: number): boolean {
-    const bbox = getTextBBox(t);
-    return px >= bbox.x && px <= bbox.x + bbox.width && py >= bbox.y && py <= bbox.y + bbox.height;
-  }
+  // 箱と当たり判定は `textHit.ts`。選択・ダブルクリック・カーソルの全部がこの
+  // 判定で決まるので、DOM もマウスも要らない形にしてテストから直接呼べる場所に
+  // 置いてある。
+  const getTextBBox = textBBox;
+  const hitTestText = hitsText;
 
   function handleMouseDown(e: MouseEvent) {
     // 編集中の input クリックは透過
@@ -57,27 +55,32 @@
     if (!pt) return;
 
     // 選択済みテキストの移動開始
+    //
+    // **`onBeforeMutate` はここでは呼ばない。** 押しただけで undo が 1 段積まれると、
+    // 選び直しやダブルクリックのたびに「何も変わっていない状態」が履歴に入る。
+    // 実際に動いた最初の 1 回で積む (handleMouseMove)。
     if (selectedId && !editingId) {
       const sel = texts.find((t) => t.id === selectedId);
       if (sel && hitTestText(sel, pt.x, pt.y)) {
-        onBeforeMutate?.();
         dragging = "move";
+        dragMutated = false;
         dragStart = pt;
         dragOrigPos = { x: sel.x, y: sel.y };
         return;
       }
     }
 
-    // 既存テキストをクリックで選択
-    const hit = [...texts].reverse().find((t) => hitTestText(t, pt.x, pt.y));
+    // 既存テキストをクリックで選択。
+    //
+    // 選択済みのものを押した場合は上の移動で return しているので、ここに来るのは
+    // 「まだ選ばれていないものを押した」時だけ。**再編集はダブルクリック**
+    // (handleDoubleClick) で、1 回のクリックでは入らない — 選んで動かすつもりの
+    // クリックが編集を開くと、位置を直すたびにキーボードが割り込む
+    // (CYBERNEURA-DEV-695)。
+    const hit = topmostTextAt(texts, pt.x, pt.y);
     if (hit) {
-      if (selectedId === hit.id) {
-        // ダブルクリック相当: 再編集
-        editingId = hit.id;
-      } else {
-        selectedId = hit.id;
-        editingId = null;
-      }
+      selectedId = hit.id;
+      editingId = null;
       return;
     }
 
@@ -104,7 +107,7 @@
       whiteStroke: settings.whiteStroke,
       dropShadow: settings.dropShadow,
     };
-    editingId = id;
+    startEditing(id);
     selectedId = id;
   }
 
@@ -115,6 +118,17 @@
     if (dragging === "move" && selectedId && dragStart && dragOrigPos) {
       const dx = pt.x - dragStart.x;
       const dy = pt.y - dragStart.y;
+      // 動いた最初の 1 回だけ undo を積む。押した時点で積むと、選び直しや
+      // ダブルクリックが「変化なし」の履歴を作る。
+      //
+      // 完全一致 (dx === 0) では足りない。ダブルクリックの 2 回目の押下も移動の
+      // 開始なので、指が 1px 揺れただけで文字がずれ、編集を開くたびに undo が
+      // 1 段積まれる。CropOverlay と同じ閾値で分ける。
+      if (!dragMutated) {
+        if (!exceedsDragSlop(dx, dy, scale)) return;
+        dragMutated = true;
+        onBeforeMutate?.();
+      }
       onTextsChange(
         texts.map((t) =>
           t.id === selectedId
@@ -132,8 +146,40 @@
 
   function handleMouseUp() {
     dragging = null;
+    dragMutated = false;
     dragStart = null;
     dragOrigPos = null;
+  }
+
+  /**
+   * 書いたテキストを直す入口。
+   *
+   * 1 回のクリックは「選ぶ」「動かす」で、編集はダブルクリック。押しただけで
+   * 編集に入ると、位置を直すつもりのクリックがそのたびにキーボードを呼び出す
+   * (CYBERNEURA-DEV-695)。
+   *
+   * 直前の mousedown が始めた移動をここで畳む。ダブルクリックの 2 回目の押下も
+   * 移動の開始なので、そのまま編集に入ると掴んだ状態が残る。
+   */
+  function handleDoubleClick(e: MouseEvent) {
+    if ((e.target as Element).closest(".text-edit-input")) return;
+
+    const pt = getSvgCoords(e);
+    if (!pt) return;
+    const hit = topmostTextAt(texts, pt.x, pt.y);
+    if (!hit) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    handleMouseUp();
+    selectedId = hit.id;
+    startEditing(hit.id);
+  }
+
+  /** 編集を開く。undo の印はここで下ろす (1 回の編集に 1 つ) */
+  function startEditing(id: string) {
+    editingId = id;
+    editMutated = false;
   }
 
   function updateHoverCursor(pt: { x: number; y: number }) {
@@ -147,8 +193,7 @@
       }
     }
 
-    const hit = [...texts].reverse().find((t) => hitTestText(t, pt.x, pt.y));
-    if (hit) {
+    if (topmostTextAt(texts, pt.x, pt.y)) {
       hoverCursor = "pointer";
       return;
     }
@@ -164,15 +209,26 @@
       pendingText = null;
     }
     editingId = null;
+    editMutated = false;
   }
 
   function handleEditInput(e: Event, id: string) {
     const value = (e.target as HTMLTextAreaElement).value;
     if (pendingText && pendingText.id === id) {
+      // 新規は作成時にもう積んである (handleMouseDown)。1 文字ごとに積むと
+      // undo が打鍵の巻き戻しになる。
       pendingText = { ...pendingText, text: value };
-    } else {
-      onTextsChange(texts.map((t) => (t.id === id ? { ...t, text: value } : t)));
+      return;
     }
+    // 既にある注釈を書き換える最初の 1 回だけ積む。押した時ではなく最初の入力で
+    // 積むのは移動と同じ理由で、開いて何も変えずに閉じた編集を履歴に残さないため。
+    // ここが無いと、書き換えた直後の ⌘Z が**別の操作**を巻き戻す
+    // (CYBERNEURA-DEV-695)。
+    if (!editMutated) {
+      editMutated = true;
+      onBeforeMutate?.();
+    }
+    onTextsChange(texts.map((t) => (t.id === id ? { ...t, text: value } : t)));
   }
 
   function handleEditKeyDown(e: KeyboardEvent) {
@@ -239,6 +295,7 @@
   onmousedown={handleMouseDown}
   onmousemove={handleMouseMove}
   onmouseup={handleMouseUp}
+  ondblclick={handleDoubleClick}
   style:cursor={dragging === "move" ? "move" : hoverCursor}
   style:pointer-events={interactive ? "auto" : "none"}
 >
@@ -253,7 +310,7 @@
     {@const isEditing = t.id === editingId}
     {@const filterAttr = t.dropShadow ? "url(#text-shadow)" : undefined}
     {@const bbox = getTextBBox(t)}
-    {@const lineHeight = t.fontSize * 1.3}
+    {@const lineHeight = t.fontSize * LINE_HEIGHT_RATIO}
     {@const fontWeight = t.bold ? "900" : "normal"}
     {@const fontStyle = t.italic ? "italic" : "normal"}
 
