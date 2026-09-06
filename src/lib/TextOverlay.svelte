@@ -25,6 +25,8 @@
   let dragging = $state<"move" | null>(null);
   /** その移動で undo を積んだか。押しただけの空振りで積まないための印 */
   let dragMutated = $state(false);
+  /** その編集で undo を積んだか。開いて閉じただけの空振りで積まないための印 */
+  let editMutated = $state(false);
   let dragStart = $state<{ x: number; y: number } | null>(null);
   let dragOrigPos = $state<{ x: number; y: number } | null>(null);
   let hoverCursor = $state<string>("default");
@@ -105,7 +107,7 @@
       whiteStroke: settings.whiteStroke,
       dropShadow: settings.dropShadow,
     };
-    editingId = id;
+    startEditing(id);
     selectedId = id;
   }
 
@@ -171,7 +173,13 @@
     e.stopPropagation();
     handleMouseUp();
     selectedId = hit.id;
-    editingId = hit.id;
+    startEditing(hit.id);
+  }
+
+  /** 編集を開く。undo の印はここで下ろす (1 回の編集に 1 つ) */
+  function startEditing(id: string) {
+    editingId = id;
+    editMutated = false;
   }
 
   function updateHoverCursor(pt: { x: number; y: number }) {
@@ -201,15 +209,26 @@
       pendingText = null;
     }
     editingId = null;
+    editMutated = false;
   }
 
   function handleEditInput(e: Event, id: string) {
     const value = (e.target as HTMLTextAreaElement).value;
     if (pendingText && pendingText.id === id) {
+      // 新規は作成時にもう積んである (handleMouseDown)。1 文字ごとに積むと
+      // undo が打鍵の巻き戻しになる。
       pendingText = { ...pendingText, text: value };
-    } else {
-      onTextsChange(texts.map((t) => (t.id === id ? { ...t, text: value } : t)));
+      return;
     }
+    // 既にある注釈を書き換える最初の 1 回だけ積む。押した時ではなく最初の入力で
+    // 積むのは移動と同じ理由で、開いて何も変えずに閉じた編集を履歴に残さないため。
+    // ここが無いと、書き換えた直後の ⌘Z が**別の操作**を巻き戻す
+    // (CYBERNEURA-DEV-695)。
+    if (!editMutated) {
+      editMutated = true;
+      onBeforeMutate?.();
+    }
+    onTextsChange(texts.map((t) => (t.id === id ? { ...t, text: value } : t)));
   }
 
   function handleEditKeyDown(e: KeyboardEvent) {
